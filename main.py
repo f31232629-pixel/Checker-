@@ -125,8 +125,8 @@ class Database:
                 "credits": FREE_SINGLE_LIMIT,
                 "joined_date": datetime.now().isoformat(),
                 "total_checks": 0,
-                "proxies": [],  # List of user's proxies
-                "active_proxy": None  # Currently active proxy
+                "proxies": [],
+                "active_proxy": None
             }
             self.data["stats"]["total_users"] += 1
             self._save_data()
@@ -180,7 +180,6 @@ class Database:
     
     # ===== Proxy Methods =====
     def add_proxy(self, user_id, proxy_string):
-        """Add a proxy to user's proxy list"""
         user_id = str(user_id)
         if user_id in self.data["users"]:
             if proxy_string not in self.data["users"][user_id]["proxies"]:
@@ -192,14 +191,12 @@ class Database:
         return False
     
     def remove_proxy(self, user_id, proxy_string):
-        """Remove a proxy from user's proxy list"""
         user_id = str(user_id)
         if user_id in self.data["users"]:
             if proxy_string in self.data["users"][user_id]["proxies"]:
                 self.data["users"][user_id]["proxies"].remove(proxy_string)
                 if self.data["users"][user_id]["active_proxy"] == proxy_string:
                     self.data["users"][user_id]["active_proxy"] = None
-                    # Set first available proxy as active
                     if self.data["users"][user_id]["proxies"]:
                         self.data["users"][user_id]["active_proxy"] = self.data["users"][user_id]["proxies"][0]
                 self._save_data()
@@ -207,7 +204,6 @@ class Database:
         return False
     
     def set_active_proxy(self, user_id, proxy_string):
-        """Set a proxy as active"""
         user_id = str(user_id)
         if user_id in self.data["users"]:
             if proxy_string in self.data["users"][user_id]["proxies"]:
@@ -217,7 +213,6 @@ class Database:
         return False
     
     def get_user_proxies(self, user_id):
-        """Get all proxies for a user"""
         user_id = str(user_id)
         user = self.get_user(user_id)
         if user:
@@ -225,7 +220,6 @@ class Database:
         return []
     
     def get_active_proxy(self, user_id):
-        """Get active proxy for a user"""
         user_id = str(user_id)
         user = self.get_user(user_id)
         if user:
@@ -274,7 +268,6 @@ class Database:
         self._save_history(entry)
         self.increment_checks(user_id)
         
-        # Save to report
         user = self.get_user(user_id)
         username = user["username"] if user else "Unknown"
         check_type = "Bulk" if is_bulk else "Single"
@@ -342,15 +335,9 @@ class CardChecker:
         self.site = SITE
     
     def check_card(self, card_number, proxy_string=None):
-        """
-        Check a single card using Shopify gateway validation
-        Returns: (status, charge_amount, response_data)
-        """
         try:
-            # Use provided proxy or default
             proxy_to_use = proxy_string if proxy_string else DEFAULT_PROXY
             
-            # Parse proxy
             proxy_parts = proxy_to_use.split(':')
             if len(proxy_parts) == 4:
                 proxy_host, proxy_port, proxy_user, proxy_pass = proxy_parts
@@ -359,14 +346,12 @@ class CardChecker:
             else:
                 proxies = None
             
-            # Prepare the request for Shopify gateway validation
             params = {
                 'site': self.site,
                 'cc': card_number,
                 'proxy': proxy_to_use
             }
             
-            # Add headers to mimic a real browser request
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'application/json',
@@ -388,7 +373,6 @@ class CardChecker:
             
             data = response.json()
             
-            # Parse the response from Shopify gateway
             if 'status' in data:
                 status = data['status'].lower()
                 charge = data.get('charge', '0.00')
@@ -451,7 +435,6 @@ class CardChecker:
             return ('Unknown', '0.00', {'error': str(e)}, proxy_to_use)
     
     def check_bulk(self, card_numbers, proxy_string=None):
-        """Check multiple cards"""
         results = []
         for card in card_numbers:
             status, charge, data, proxy = self.check_card(card, proxy_string)
@@ -469,13 +452,11 @@ class CardChecker:
 class RedeemCodeManager:
     @staticmethod
     def generate_code(length=12):
-        """Generate a random alphanumeric code"""
         characters = string.ascii_uppercase + string.digits
         return ''.join(random.choices(characters, k=length))
     
     @staticmethod
     def parse_duration(duration_str):
-        """Parse duration like '1m', '1y' to days"""
         if duration_str.endswith('m'):
             months = int(duration_str[:-1])
             return months * 30
@@ -487,16 +468,13 @@ class RedeemCodeManager:
 
 # ============== UTILITY FUNCTIONS ==============
 def validate_card(card_number):
-    """Basic card validation (Luhn algorithm)"""
     card_number = re.sub(r'\s+', '', card_number)
     if not card_number.isdigit():
         return False
     
-    # Check length (13-19 digits)
     if len(card_number) < 13 or len(card_number) > 19:
         return False
     
-    # Luhn algorithm
     total = 0
     reverse_digits = card_number[::-1]
     for i, digit in enumerate(reverse_digits):
@@ -510,13 +488,11 @@ def validate_card(card_number):
     return total % 10 == 0
 
 def format_card_for_display(card):
-    """Format card number for display (masked)"""
     if len(card) >= 16:
         return f"{card[:4]}****{card[-4:]}"
     return card
 
 def parse_file_content(content):
-    """Parse card numbers from file content"""
     lines = content.split('\n')
     cards = []
     for line in lines:
@@ -526,7 +502,6 @@ def parse_file_content(content):
     return cards
 
 def validate_proxy(proxy_string):
-    """Validate proxy format: host:port:username:password"""
     parts = proxy_string.split(':')
     if len(parts) == 4:
         host, port, username, password = parts
@@ -535,7 +510,6 @@ def validate_proxy(proxy_string):
     return False
 
 # ============== TELEGRAM BOT HANDLERS ==============
-# Initialize database and card checker
 db = Database()
 card_checker = CardChecker()
 redeem_manager = RedeemCodeManager()
@@ -638,16 +612,13 @@ async def single_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     card = args[0].strip()
     
-    # Validate card
     if not validate_card(card):
         await update.message.reply_text("❌ Invalid card number. Please check and try again.")
         return
     
-    # Check user credits
     user_plan = db.get_user_plan(user_id)
     credits = db.get_user_credits(user_id)
     
-    # Check if user has premium or enough credits
     is_premium = user_plan and user_plan[0] != 'free'
     if not is_premium and credits <= 0:
         await update.message.reply_text(
@@ -656,27 +627,21 @@ async def single_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    # Get user's active proxy
     active_proxy = db.get_active_proxy(user_id)
     if not active_proxy:
         active_proxy = DEFAULT_PROXY
     
-    # Deduct credit for free users
     if not is_premium:
         db.deduct_credits(user_id, 1)
     
-    # Check the card
     status_text = await update.message.reply_text(f"🔄 Checking card through Shopify gateway using proxy: `{active_proxy[:30]}...`", parse_mode='Markdown')
     
     status, charge, data, used_proxy = card_checker.check_card(card, active_proxy)
     
-    # Save to history
     db.add_check_history(user_id, card, status, charge, used_proxy, is_bulk=0)
     
-    # Format response
     formatted_card = format_card_for_display(card)
     
-    # Emoji for status
     status_emoji = {
         'Live': '✅',
         'Charge': '💰',
@@ -695,13 +660,13 @@ async def single_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
 """
 
     if status == 'Live':
-        response += f"✅ Card is VALID and working on Shopify\n"
+        response += "✅ Card is VALID and working on Shopify\n"
     elif status == 'Charge':
         response += f"💰 Card has funds! Amount: *${charge}*\n"
     elif status == 'Dead':
-        response += f"❌ Card is INVALID or declined by Shopify\n"
+        response += "❌ Card is INVALID or declined by Shopify\n"
     else:
-        response += f"❓ Status could not be determined\n"
+        response += "❓ Status could not be determined\n"
     
     response += f"""
 📝 Details:
