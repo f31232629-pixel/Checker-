@@ -33,7 +33,7 @@ from telegram.constants import ParseMode
 # CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════
 
-BOT_TOKEN = "8962210629:AAFhB5oNooreoJRhIuG7Frc9kqRxpQ2NWHA"
+BOT_TOKEN = "8854554558:AAEYPmz9Vd0GqdbibAK8NR7HlXb4doHXOTM"
 OWNER_ID = 8570832903
 CONTACT_USERNAME = "@theaadikoder"
 
