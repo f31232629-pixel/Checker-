@@ -9,7 +9,7 @@ import xml.etree.ElementTree as ET
 import os
 
 # ===================== CONFIG =====================
-BOT_TOKEN = "8854554558:AAGKqtF4BimDmTLbXqy9_czvHEvr5iMNse8"
+BOT_TOKEN = "8854554558:AAFK6zToPA3qb_TS75E_U9a-G_1RitDcgdA"
 MAX_MASS_CHECK = 131
 PROXY_FILE = "proxy_list.txt"
 
