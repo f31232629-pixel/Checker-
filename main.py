@@ -13,25 +13,25 @@ BOT_TOKEN = "8854554558:AAFK6zToPA3qb_TS75E_U9a-G_1RitDcgdA"
 MAX_MASS_CHECK = 131
 PROXY_FILE = "proxy_list.txt"
 
-# Default proxy list (used only if file doesn't exist)
 DEFAULT_PROXIES = [
-    "ahiuzpl7zo07:193m4s2y57uzdqy@45.3.39.184:3129",
-    "ahiuzpl7zo07:193m4s2y57uzdqy@216.26.254.73:3129",
-    "ahiuzpl7zo07:193m4s2y57uzdqy@65.111.10.114:3129",
-    "ahiuzpl7zo07:193m4s2y57uzdqy@217.181.92.25:3129",
-    "ahiuzpl7zo07:193m4s2y57uzdqy@216.26.235.55:3129",
-    "ahiuzpl7zo07:193m4s2y57uzdqy@45.3.38.253:3129",
-    "ahiuzpl7zo07:193m4s2y57uzdqy@216.26.226.250:3129",
-    "ahiuzpl7zo07:193m4s2y57uzdqy@209.50.187.208:3129",
-    "ahiuzpl7zo07:193m4s2y57uzdqy@209.50.162.26:3129",
-    "ahiuzpl7zo07:193m4s2y57uzdqy@217.181.91.212:3129",
-    "ahiuzpl7zo07:193m4s2y57uzdqy@209.50.191.157:3129",
-    "ahiuzpl7zo07:193m4s2y57uzdqy@65.111.9.203:3129",
-    "ahiuzpl7zo07:193m4s2y57uzdqy@45.3.50.117:3129",
-    "ahiuzpl7zo07:193m4s2y57uzdqy@45.3.54.91:3129",
-    "ahiuzpl7zo07:193m4s2y57uzdqy@209.50.186.41:3129",
-    "ahiuzpl7zo07:193m4s2y57uzdqy@45.3.45.169:3129",
-    "ahiuzpl7zo07:193m4s2y57uzdqy@104.207.53.120:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@104.207.60.148:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@209.50.170.138:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@104.207.49.59:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@104.207.40.228:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@65.111.0.40:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@65.111.5.31:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@104.207.38.238:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@104.207.33.161:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@209.50.166.226:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@216.26.225.61:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@216.26.249.212:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@65.111.0.216:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@65.111.15.217:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@45.3.62.100:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@216.26.252.209:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@104.207.40.131:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@104.207.59.223:3129",
+    "7mvqt1wy6i1o:7jt5zr3c0ix1s0o@209.50.185.169:3129",
 ]
 
 shop_urls = [
