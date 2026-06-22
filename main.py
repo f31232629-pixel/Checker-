@@ -11,7 +11,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 # ============== CONFIGURATION ==============
-BOT_TOKEN = "8962210629:AAFhB5oNooreoJRhIuG7Frc9kqRxpQ2NWHA"
+BOT_TOKEN = "8854554558:AAEiuvp-nKrlrI2Hfhz6gmo8WQ8jaNq9d1s"
 OWNER_ID = 8570832903
 API_URL = "https://nik.cards/shopify"
 DEFAULT_PROXY = "ca-mon.pvdata.host:8080:g2rTXpNfPdcw2fzGtWKp62yH:nizar1elad2"
